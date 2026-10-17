@@ -32,12 +32,14 @@ class CashTransaction {
       required this.amount,
       required this.type,
       required this.category,
+      this.contributorId,
       required this.date,
       required this.description});
   final int? id;
   final int amount;
   final String type;
   final String category;
+  final String? contributorId;
   final String date;
   final String description;
   int get signedAmount => type == 'IN' ? amount : -amount;
@@ -68,6 +70,7 @@ class CashTransaction {
       amount: row['amount']! as int,
       type: row['type']! as String,
       category: row['category']! as String,
+      contributorId: row['contributor_id'] as String?,
       date: row['tx_date']! as String,
       description: row['description']! as String);
 }

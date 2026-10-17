@@ -16,11 +16,19 @@ CREATE TABLE monthly_reports (
   CHECK(verified_by IS NULL OR approved_by IS NOT NULL)
 );
 -- @statement
+CREATE TABLE monthly_targets (
+  period TEXT NOT NULL CHECK(length(period)=7 AND substr(period,6,2) BETWEEN '01' AND '12'),
+  member_id TEXT NOT NULL REFERENCES users(id),
+  amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND 1000000000000),
+  PRIMARY KEY(period, member_id)
+);
+-- @statement
 CREATE TABLE transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 1 AND 1000000000000),
   type TEXT NOT NULL CHECK(type IN ('IN','OUT')),
   category TEXT NOT NULL CHECK(length(trim(category)) BETWEEN 1 AND 80),
+  contributor_id TEXT REFERENCES users(id),
   tx_date TEXT NOT NULL CHECK(length(tx_date)=10 AND date(tx_date,'+0 days') IS NOT NULL AND date(tx_date,'+0 days')=tx_date),
   description TEXT NOT NULL CHECK(length(trim(description)) BETWEEN 1 AND 1000),
   created_by TEXT NOT NULL REFERENCES users(id),
@@ -32,6 +40,8 @@ CREATE TABLE transactions (
 CREATE INDEX idx_tx_date ON transactions(tx_date DESC,id DESC);
 -- @statement
 CREATE INDEX idx_tx_category ON transactions(category,tx_date);
+-- @statement
+CREATE INDEX idx_tx_contributor_date ON transactions(contributor_id,tx_date);
 -- @statement
 CREATE INDEX idx_tx_fingerprint ON transactions(fingerprint);
 -- @statement

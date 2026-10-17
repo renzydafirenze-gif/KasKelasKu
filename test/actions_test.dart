@@ -165,10 +165,12 @@ void main() {
       final repo = ActionRepository()..duplicate = true;
       await mount(tester, repo, const TransactionEntry());
       await tester.enterText(find.byKey(const Key('amount_input')), '5000');
-      await tester.enterText(find.widgetWithText(TextField, 'Kategori'), 'Kas');
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Kategori / tujuan'), 'Kas');
       await tester.enterText(
           find.widgetWithText(TextField, 'Keterangan'), 'Iuran');
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.ensureVisible(find.byKey(const Key('transaction_type_input')));
+      await tester.tap(find.byKey(const Key('transaction_type_input')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pengeluaran').last);
       await tester.pumpAndSettle();

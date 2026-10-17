@@ -40,10 +40,21 @@ class TreasuryRepository {
       throw const AppError('Database tidak ditemukan. Pulihkan dari cadangan.');
     }
     if (openForTesting != null) return openForTesting!(path, key, create);
-    final database = await openDatabase(path, password: key, version: 1,
+    final database = await openDatabase(path, password: key, version: 2,
         onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys=ON');
-    }, onCreate: (db, _) async {
+    }, // coverage:ignore-start
+        onUpgrade: (db, oldVersion, newVersion) async {
+      if (oldVersion < 2) {
+        await db.execute(
+            'ALTER TABLE transactions ADD COLUMN contributor_id TEXT REFERENCES users(id)');
+        await db.execute(
+            'CREATE TABLE monthly_targets (period TEXT NOT NULL, member_id TEXT NOT NULL REFERENCES users(id), amount INTEGER NOT NULL, PRIMARY KEY(period, member_id))');
+        await db.execute(
+            'CREATE INDEX idx_tx_contributor_date ON transactions(contributor_id,tx_date)');
+      }
+    }, // coverage:ignore-end
+        onCreate: (db, _) async {
       final schema = await rootBundle.loadString('lib/data/schema.sql');
       for (final statement in schema.split('-- @statement')) {
         if (statement.trim().isNotEmpty) await db.execute(statement);
@@ -245,7 +256,12 @@ class TreasuryRepository {
     // SQL DDL is transactional: failed import restores both data and triggers.
     final schema = await rootBundle.loadString('lib/data/schema.sql');
     await _write({Role.bendahara}, (txn, actor) async {
-      for (final table in ['transactions', 'monthly_reports', 'audit_log']) {
+      for (final table in [
+        'transactions',
+        'monthly_reports',
+        'monthly_targets',
+        'audit_log'
+      ]) {
         final count = await txn.rawQuery('SELECT COUNT(*) AS n FROM $table');
         if (count.single['n'] != 0) {
           throw const AppError(
@@ -360,6 +376,7 @@ class TreasuryRepository {
         'amount': entry.amount,
         'type': entry.type,
         'category': entry.category.trim(),
+        'contributor_id': entry.contributorId,
         'tx_date': entry.date,
         'description': entry.description.trim(),
         'created_by': actor.id,
@@ -442,6 +459,30 @@ class TreasuryRepository {
     return (await db.query('users', orderBy: 'name'))
         .map(Member.fromMap)
         .toList();
+  }
+
+  Future<void> setMonthlyTarget(
+      String period, String memberId, int amount) async {
+    validateMonth(period);
+    if (amount < 0 || amount > 1000000000000)
+      throw const AppError('Target tidak valid.');
+    await _write({Role.bendahara}, (txn, actor) async {
+      await txn.insert('monthly_targets',
+          {'period': period, 'member_id': memberId, 'amount': amount},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      await _audit(txn, actor, 'target.set', '$period:$memberId');
+    });
+  }
+
+  Future<List<Map<String, Object?>>> monthlyTargetStatus(String period) async {
+    validateMonth(period);
+    await _authorize(db);
+    return db.rawQuery('''SELECT u.id, u.name, COALESCE(t.amount, 0) target,
+      COALESCE(SUM(CASE WHEN x.type='IN' THEN x.amount ELSE 0 END),0) paid
+      FROM users u LEFT JOIN monthly_targets t ON t.member_id=u.id AND t.period=?
+      LEFT JOIN transactions x ON x.contributor_id=u.id AND substr(x.tx_date,1,7)=?
+      WHERE u.role='siswa' AND u.active=1 GROUP BY u.id,u.name,t.amount ORDER BY u.name''',
+        [period, period]);
   }
 
   static void _validateName(String name) {

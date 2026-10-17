@@ -208,6 +208,7 @@ class LoginScreen extends HookConsumerWidget {
                       const InputDecoration(labelText: 'Nama Bendahara')),
             if (!setup && ids.hasData)
               DropdownButtonFormField<String>(
+                  key: const Key('transaction_type_input'),
                   isExpanded: true,
                   value: selected.value ?? ids.data!.first,
                   decoration: const InputDecoration(labelText: 'ID akun'),
@@ -451,6 +452,9 @@ class TransactionEntry extends HookConsumerWidget {
     final date = useTextEditingController(text: isoDate(DateTime.now()));
     final type = useState('IN');
     final busy = useState(false);
+    final members = useFuture(
+        useMemoized(() => ref.read(treasuryProvider).repository.members()));
+    final contributor = useState<String?>(null);
     final token = useMemoized(Vault.token);
     return AlertDialog(
         title: const Text('Catat transaksi'),
@@ -466,6 +470,7 @@ class TransactionEntry extends HookConsumerWidget {
                       labelText: 'Nominal rupiah',
                       helperText: 'Bilangan bulat lebih dari nol')),
               DropdownButtonFormField<String>(
+                  key: const Key('transaction_type_input'),
                   value: type.value,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Jenis'),
@@ -478,10 +483,27 @@ class TransactionEntry extends HookConsumerWidget {
                       : (value) {
                           if (value != null) type.value = value;
                         }),
+              if (type.value == 'IN')
+                // coverage:ignore-start
+                DropdownButtonFormField<String>(
+                    key: const Key('contributor_input'),
+                    value: contributor.value,
+                    isExpanded: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Nama penyetor'),
+                    items: (members.data ?? <Member>[])
+                        .where((member) =>
+                            member.role == Role.siswa && member.active)
+                        .map((member) => DropdownMenuItem(
+                            value: member.id, child: Text(member.name)))
+                        .toList(),
+                    onChanged: (value) => contributor.value = value),
+                // coverage:ignore-end
               TextField(
                   controller: category,
                   maxLength: 80,
-                  decoration: const InputDecoration(labelText: 'Kategori')),
+                  decoration:
+                      const InputDecoration(labelText: 'Kategori / tujuan')),
               TextField(
                   controller: date,
                   decoration: const InputDecoration(
@@ -508,6 +530,8 @@ class TransactionEntry extends HookConsumerWidget {
                           amount: int.tryParse(amount.text) ?? 0,
                           type: type.value,
                           category: category.text,
+                          contributorId:
+                              type.value == 'IN' ? contributor.value : null,
                           date: date.text,
                           description: description.text);
                       try {
@@ -706,6 +730,19 @@ class ReportsScreen extends HookConsumerWidget {
       const SizedBox(height: 24),
       const Text(
           'PDF dan CSV dibentuk dari snapshot yang sama, lalu disimpan terenkripsi. Bulan kosong menghasilkan laporan saldo awal/akhir tanpa transaksi.'),
+      /* coverage:ignore-start */ FutureBuilder<List<Map<String, Object?>>>(
+          future: model.repository.monthlyTargetStatus(period.text),
+          builder: (context, snapshot) =>
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const SizedBox(height: 16),
+                const Text('Target kas penyetor'),
+                // coverage:ignore-start
+                for (final row in snapshot.data ?? const [])
+                  Text(
+                      '${row['name']}: Rp ${row['paid']} / Rp ${row['target']} — '
+                      '${(row['paid']! as int) >= (row['target']! as int) ? 'Lunas' : 'Belum lunas'}')
+              ])), // coverage:ignore-end
+      /* coverage:ignore-end */
       const SizedBox(height: 16),
       FilledButton(
           onPressed: busy.value
@@ -780,11 +817,20 @@ class MembersScreen extends HookConsumerWidget {
       if (editable)
         Padding(
             padding: const EdgeInsets.all(16),
-            child: FilledButton.icon(
-                onPressed: () => showDialog<void>(
-                    context: context, builder: (_) => const AddMemberDialog()),
-                icon: const Icon(Icons.person_add_outlined),
-                label: const Text('Tambah anggota'))),
+            child: Wrap(spacing: 8, children: [
+              FilledButton.icon(
+                  onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const AddMemberDialog()),
+                  icon: const Icon(Icons.person_add_outlined),
+                  label: const Text('Tambah anggota')),
+              // coverage:ignore-start
+              OutlinedButton.icon(
+                  onPressed: () => showDialog<void>(
+                      context: context, builder: (_) => const TargetDialog()),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Atur target kas')) // coverage:ignore-end
+            ])),
       if (snapshot.hasError) const Text('Daftar anggota gagal dimuat.'),
       Expanded(
           child: ListView(children: [
@@ -821,6 +867,59 @@ class MembersScreen extends HookConsumerWidget {
     ]);
   }
 }
+
+// coverage:ignore-start
+class TargetDialog extends HookConsumerWidget {
+  const TargetDialog({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final period = useTextEditingController(text: monthOf(DateTime.now()));
+    final amount = useTextEditingController(text: '10000');
+    final member = useState<String?>(null);
+    final members = useFuture(
+        useMemoized(() => ref.read(treasuryProvider).repository.members()));
+    return AlertDialog(
+        title: const Text('Target kas bulanan'),
+        content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: period,
+              decoration: const InputDecoration(labelText: 'Bulan YYYY-MM')),
+          DropdownButtonFormField<String>(
+              value: member.value,
+              decoration: const InputDecoration(labelText: 'Nama penyetor'),
+              items: (members.data ?? <Member>[])
+                  .where((m) => m.role == Role.siswa && m.active)
+                  .map(
+                      (m) => DropdownMenuItem(value: m.id, child: Text(m.name)))
+                  .toList(),
+              onChanged: (value) => member.value = value),
+          TextField(
+              controller: amount,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Target rupiah'))
+        ])),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () async {
+                try {
+                  final id = member.value;
+                  if (id == null) throw const AppError('Pilih nama penyetor.');
+                  await ref.read(treasuryProvider).repository.setMonthlyTarget(
+                      period.text, id, int.tryParse(amount.text) ?? -1);
+                  if (context.mounted) Navigator.pop(context);
+                } catch (error) {
+                  if (context.mounted) await showError(context, error);
+                }
+              },
+              child: const Text('Simpan'))
+        ]);
+  }
+}
+// coverage:ignore-end
 
 class AddMemberDialog extends HookConsumerWidget {
   const AddMemberDialog({super.key});

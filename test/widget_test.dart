@@ -35,7 +35,8 @@ void main() {
     await tester.tap(find.text('Buka'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('amount_input')), '15000');
-    await tester.enterText(find.widgetWithText(TextField, 'Kategori'), 'Iuran');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Kategori / tujuan'), 'Iuran');
     await tester.enterText(
         find.byKey(const Key('description_input')), 'Kas pekan pertama');
     await tester.tap(find.byKey(const Key('submit_tx_btn')));

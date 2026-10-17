@@ -8,16 +8,24 @@ class Backup {
     }
     for (final table in columns.keys) {
       final raw = source[table];
+      if (raw == null && table == 'monthly_targets') {
+        tables[table] = [];
+        continue;
+      }
       if (raw is! List || raw.length > 100000) {
         throw const AppError('Isi cadangan tidak valid atau terlalu besar.');
       }
       tables[table] = raw.map((value) {
-        if (value is! Map ||
-            value.keys.toSet().difference(columns[table]!).isNotEmpty ||
-            !value.keys.toSet().containsAll(columns[table]!)) {
+        final keys = value is Map ? value.keys.toSet() : <Object?>{};
+        final required = table == 'transactions'
+            ? columns[table]!.difference({'contributor_id'})
+            : columns[table]!;
+        if (value is! Map || !keys.containsAll(required)) {
           throw const AppError('Kolom cadangan tidak valid.');
         }
-        return Map<String, Object?>.from(value);
+        final row = Map<String, Object?>.from(value);
+        if (table == 'transactions') row['contributor_id'] ??= null;
+        return row;
       }).toList();
     }
     final ids = <String>{};
@@ -104,6 +112,7 @@ class Backup {
       'verified_by',
       'verified_at'
     },
+    'monthly_targets': {'period', 'member_id', 'amount'},
     'audit_log': {'id', 'actor', 'action', 'target', 'at'},
   };
   final tables = <String, List<Map<String, Object?>>>{};

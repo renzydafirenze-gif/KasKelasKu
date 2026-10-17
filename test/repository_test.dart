@@ -100,6 +100,31 @@ void main() {
     expect((await repo.reportSnapshot('2026-11'))['opening'], 10000);
   });
 
+  test('Monthly targets calculate paid status without carry-over', () async {
+    await repo.setup('Bendahara', password);
+    await repo.addMember('Siswa Target', Role.siswa, password);
+    final student =
+        (await repo.members()).firstWhere((m) => m.name == 'Siswa Target');
+    await repo.setMonthlyTarget('2026-10', student.id, 10000);
+    await repo.addTransaction(
+        CashTransaction(
+            amount: 15000,
+            type: 'IN',
+            category: 'Kas',
+            contributorId: student.id,
+            date: '2026-10-15',
+            description: 'Iuran'),
+        'one');
+    final october = await repo.monthlyTargetStatus('2026-10');
+    expect(october.single['paid'], 15000);
+    expect(october.single['target'], 10000);
+    final november = await repo.monthlyTargetStatus('2026-11');
+    expect(november.single['paid'], 0);
+    expect(november.single['target'], 0);
+    await expectLater(repo.setMonthlyTarget('2026-10', student.id, -1),
+        throwsA(isA<AppError>()));
+  });
+
   test('Role matrix, report locks, verification and mid-session revocation',
       () async {
     final treasurer = await repo.setup('Bendahara', password);

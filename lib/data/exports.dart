@@ -194,6 +194,7 @@ class Exports {
         [
           row['tx_date'],
           row['type'],
+          row['contributor_id'] ?? '',
           row['category'],
           row['amount'],
           row['description']
