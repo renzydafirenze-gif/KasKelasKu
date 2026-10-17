@@ -98,9 +98,10 @@ void main() {
     expect(shares, hasLength(1));
     final files = (shares.single.arguments as Map)['paths'] as List;
     expect(files, hasLength(2));
-    for (final path in files) {
-      expect(jsonDecode(File(path as String).readAsStringSync()), isA<Map>());
-    }
+    expect((files.first as String), endsWith('KasKelasKu.pdf'));
+    expect((files.last as String), endsWith('KasKelasKu.csv'));
+    expect(File(files.first as String).existsSync(), false);
+    expect(File(files.last as String).existsSync(), false);
     expect(find.text('Selesai.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });

@@ -711,17 +711,26 @@ class ReportsScreen extends HookConsumerWidget {
           onPressed: busy.value
               ? null
               : () => run(() async {
+                    final exportPassword = password.text;
                     final files =
-                        await model.exports.report(period.text, password.text);
+                        await model.exports.report(period.text, exportPassword);
                     password.clear();
-                    await Share.shareXFiles(
-                        [XFile(files.pdf.path), XFile(files.csv.path)],
-                        text: 'Laporan KasKelasKu terenkripsi',
-                        sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(
-                              'Laporan terenkripsi: ${files.pdf.path}\n${files.csv.path}')));
+                    final sharedPdf = await model.exports
+                        .decryptReport(files.pdf, exportPassword);
+                    final sharedCsv = await model.exports
+                        .decryptReport(files.csv, exportPassword);
+                    try {
+                      await Share.shareXFiles(
+                          [XFile(sharedPdf.path), XFile(sharedCsv.path)],
+                          text: 'Laporan KasKelasKu',
+                          sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('PDF dan CSV siap dibagikan.')));
+                      }
+                    } finally {
+                      await Exports.cleanupPlaintext();
                     }
                   }),
           child: const Text('Buat PDF dan CSV terenkripsi')),
