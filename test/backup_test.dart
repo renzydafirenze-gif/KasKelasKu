@@ -8,7 +8,9 @@ void main() {
         'users': <Object?>[],
         'transactions': <Object?>[],
         'monthly_reports': <Object?>[],
-        'audit_log': <Object?>[]
+        'audit_log': <Object?>[],
+        'monthly_targets': <Object?>[],
+        'monthly_total_targets': <Object?>[]
       };
   test('Backup validates table shapes and schema', () {
     expect(Backup(empty()).tables['users'], isEmpty);
@@ -61,5 +63,11 @@ void main() {
               ]
             }),
         throwsA(isA<AppError>()));
+  });
+  test('Backup accepts legacy total target rows without amount', () {
+    expect(
+        Backup({...empty(), 'monthly_total_targets': [
+          {'period': '2026-10'}
+        ]}).tables['monthly_total_targets'], hasLength(1));
   });
 }

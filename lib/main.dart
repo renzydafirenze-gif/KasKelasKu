@@ -498,7 +498,7 @@ class TransactionEntry extends HookConsumerWidget {
                             value: member.id, child: Text(member.name)))
                         .toList(),
                     onChanged: (value) => contributor.value = value),
-                // coverage:ignore-end
+              // coverage:ignore-end
               TextField(
                   controller: category,
                   maxLength: 80,
@@ -735,7 +735,7 @@ class ReportsScreen extends HookConsumerWidget {
           builder: (context, snapshot) =>
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const SizedBox(height: 16),
-                const Text('Target kas penyetor'),
+                const Text('Target kas keseluruhan'),
                 // coverage:ignore-start
                 for (final row in snapshot.data ?? const [])
                   Text(
@@ -879,7 +879,7 @@ class TargetDialog extends HookConsumerWidget {
     final members = useFuture(
         useMemoized(() => ref.read(treasuryProvider).repository.members()));
     return AlertDialog(
-        title: const Text('Target kas bulanan'),
+        title: const Text('Target kas keseluruhan bulanan'),
         content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
@@ -926,7 +926,6 @@ class AddMemberDialog extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final name = useTextEditingController();
-    final password = useTextEditingController();
     final role = useState(Role.siswa);
     final busy = useState(false);
     return AlertDialog(
@@ -937,11 +936,6 @@ class AddMemberDialog extends HookConsumerWidget {
               controller: name,
               decoration: const InputDecoration(labelText: 'Nama'),
               maxLength: 80),
-          TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: 'Kata sandi minimal 12 karakter')),
           DropdownButtonFormField<Role>(
               value: role.value,
               items: Role.values
@@ -964,8 +958,7 @@ class AddMemberDialog extends HookConsumerWidget {
                         await ref
                             .read(treasuryProvider)
                             .repository
-                            .addMember(name.text, role.value, password.text);
-                        password.clear();
+                            .addMember(name.text, role.value, '');
                         if (context.mounted) Navigator.pop(context);
                       } catch (error) {
                         if (context.mounted) await showError(context, error);

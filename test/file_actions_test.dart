@@ -90,7 +90,7 @@ void main() {
     await mount(tester, const ReportsScreen());
     await tester.tap(find.text('Buat PDF dan CSV terenkripsi'));
     await tester.pumpAndSettle();
-    expect(find.text('Kata sandi harus 12–128 karakter.'), findsOneWidget);
+    expect(find.text('Kata sandi harus 4–128 karakter.'), findsOneWidget);
     await tester.enterText(
         find.widgetWithText(TextField, 'Kata sandi ekspor minimal 12 karakter'),
         password);
@@ -211,7 +211,7 @@ void main() {
     await mount(tester, const SettingsScreen());
     await tapAndWait(tester, find.text('Buat cadangan lokal'));
     expect(shares, isEmpty);
-    expect(find.text('Kata sandi harus 12–128 karakter.'), findsOneWidget);
+    expect(find.text('Kata sandi harus 4–128 karakter.'), findsOneWidget);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
             const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),

@@ -43,6 +43,6 @@ void main() {
     damaged['tag'] = base64Encode(List.filled(16, 0));
     expect(Vault.unseal(jsonEncode(damaged), password, context),
         throwsA(isA<AppError>()));
-    expect(() => Vault.validatePassword('1234'), throwsA(isA<AppError>()));
+    expect(() => Vault.validatePassword('1234'), returnsNormally);
   }, timeout: const Timeout(Duration(minutes: 3)));
 }

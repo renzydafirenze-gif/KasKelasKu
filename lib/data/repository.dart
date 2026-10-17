@@ -40,7 +40,7 @@ class TreasuryRepository {
       throw const AppError('Database tidak ditemukan. Pulihkan dari cadangan.');
     }
     if (openForTesting != null) return openForTesting!(path, key, create);
-    final database = await openDatabase(path, password: key, version: 2,
+    final database = await openDatabase(path, password: key, version: 3,
         onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys=ON');
     }, // coverage:ignore-start
@@ -52,6 +52,10 @@ class TreasuryRepository {
             'CREATE TABLE monthly_targets (period TEXT NOT NULL, member_id TEXT NOT NULL REFERENCES users(id), amount INTEGER NOT NULL, PRIMARY KEY(period, member_id))');
         await db.execute(
             'CREATE INDEX idx_tx_contributor_date ON transactions(contributor_id,tx_date)');
+      }
+      if (oldVersion < 3) {
+        await db.execute(
+            'CREATE TABLE monthly_total_targets (period TEXT PRIMARY KEY, amount INTEGER NOT NULL)');
       }
     }, // coverage:ignore-end
         onCreate: (db, _) async {
@@ -260,6 +264,7 @@ class TreasuryRepository {
         'transactions',
         'monthly_reports',
         'monthly_targets',
+        'monthly_total_targets',
         'audit_log'
       ]) {
         final count = await txn.rawQuery('SELECT COUNT(*) AS n FROM $table');
@@ -474,6 +479,33 @@ class TreasuryRepository {
     });
   }
 
+  Future<void> setTotalMonthlyTarget(String period, int amount) async {
+    validateMonth(period);
+    if (amount < 0 || amount > 1000000000000) {
+      throw const AppError('Target tidak valid.');
+    }
+    await _write({Role.bendahara}, (txn, actor) async {
+      await txn.insert(
+          'monthly_total_targets', {'period': period, 'amount': amount},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      await _audit(txn, actor, 'target.total.set', '$period:$amount');
+    });
+  }
+
+  Future<Map<String, Object?>> totalMonthlyTargetStatus(String period) async {
+    validateMonth(period);
+    await _authorize(db);
+    final target = await db
+        .query('monthly_total_targets', where: 'period=?', whereArgs: [period]);
+    final paid = await db.rawQuery(
+        "SELECT COALESCE(SUM(amount),0) paid FROM transactions WHERE type='IN' AND substr(tx_date,1,7)=?",
+        [period]);
+    return {
+      'target': target.isEmpty ? 0 : target.single['amount']!,
+      'paid': paid.single['paid']!
+    };
+  }
+
   Future<List<Map<String, Object?>>> monthlyTargetStatus(String period) async {
     validateMonth(period);
     await _authorize(db);
@@ -493,6 +525,7 @@ class TreasuryRepository {
 
   Future<void> addMember(String name, Role role, String password) async {
     _validateName(name);
+    if (password.isEmpty) password = 'Anggota-${Vault.token()}';
     Vault.validatePassword(password);
     final actor = await _authorize(db, {Role.bendahara});
     final id = Vault.token();

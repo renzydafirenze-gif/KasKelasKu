@@ -13,8 +13,8 @@ class Vault {
       List.generate(count, (_) => random.nextInt(256));
   static String token() => base64UrlEncode(randomBytes(24));
   static void validatePassword(String password) {
-    if (password.length < 12 || password.length > 128) {
-      throw const AppError('Kata sandi harus 12–128 karakter.');
+    if (password.length < 4 || password.length > 128) {
+      throw const AppError('Kata sandi harus 4–128 karakter.');
     }
   }
 

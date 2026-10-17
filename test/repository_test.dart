@@ -123,6 +123,11 @@ void main() {
     expect(november.single['target'], 0);
     await expectLater(repo.setMonthlyTarget('2026-10', student.id, -1),
         throwsA(isA<AppError>()));
+    await repo.setTotalMonthlyTarget('2026-10', 20000);
+    expect(await repo.totalMonthlyTargetStatus('2026-10'),
+        {'target': 20000, 'paid': 15000});
+    await expectLater(
+        repo.setTotalMonthlyTarget('2026-10', -1), throwsA(isA<AppError>()));
   });
 
   test('Role matrix, report locks, verification and mid-session revocation',

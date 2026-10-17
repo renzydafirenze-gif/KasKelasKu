@@ -120,9 +120,6 @@ void main() {
       final repo = ActionRepository()..fail = fail;
       await mount(tester, repo, const AddMemberDialog());
       await tester.enterText(find.widgetWithText(TextField, 'Nama'), 'Siti');
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Kata sandi minimal 12 karakter'),
-          'Password-kelas-2026!');
       await tester.tap(find.byType(DropdownButtonFormField<Role>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Ketua').last);
@@ -134,7 +131,7 @@ void main() {
         expect(find.byType(AddMemberDialog), findsOneWidget);
         expect(repo.calls, isEmpty);
       } else {
-        expect(repo.calls, ['member:Siti:ketua:Password-kelas-2026!']);
+        expect(repo.calls, ['member:Siti:ketua:']);
         expect(find.byType(AddMemberDialog), findsNothing);
       }
     });

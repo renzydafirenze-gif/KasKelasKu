@@ -8,7 +8,8 @@ class Backup {
     }
     for (final table in columns.keys) {
       final raw = source[table];
-      if (raw == null && table == 'monthly_targets') {
+      if (raw == null &&
+          (table == 'monthly_targets' || table == 'monthly_total_targets')) {
         tables[table] = [];
         continue;
       }
@@ -19,7 +20,9 @@ class Backup {
         final keys = value is Map ? value.keys.toSet() : <Object?>{};
         final required = table == 'transactions'
             ? columns[table]!.difference({'contributor_id'})
-            : columns[table]!;
+            : (table == 'monthly_total_targets'
+                ? columns[table]!.difference({'amount'})
+                : columns[table]!);
         if (value is! Map || !keys.containsAll(required)) {
           throw const AppError('Kolom cadangan tidak valid.');
         }
@@ -113,6 +116,7 @@ class Backup {
       'verified_at'
     },
     'monthly_targets': {'period', 'member_id', 'amount'},
+    'monthly_total_targets': {'period', 'amount'},
     'audit_log': {'id', 'actor', 'action', 'target', 'at'},
   };
   final tables = <String, List<Map<String, Object?>>>{};

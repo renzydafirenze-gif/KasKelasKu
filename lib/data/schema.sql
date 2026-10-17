@@ -23,6 +23,11 @@ CREATE TABLE monthly_targets (
   PRIMARY KEY(period, member_id)
 );
 -- @statement
+CREATE TABLE monthly_total_targets (
+  period TEXT PRIMARY KEY CHECK(length(period)=7 AND substr(period,6,2) BETWEEN '01' AND '12'),
+  amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND 1000000000000)
+);
+-- @statement
 CREATE TABLE transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 1 AND 1000000000000),
