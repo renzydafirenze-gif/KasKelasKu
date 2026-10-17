@@ -719,18 +719,14 @@ class ReportsScreen extends HookConsumerWidget {
                         .decryptReport(files.pdf, exportPassword);
                     final sharedCsv = await model.exports
                         .decryptReport(files.csv, exportPassword);
-                    try {
-                      await Share.shareXFiles(
-                          [XFile(sharedPdf.path), XFile(sharedCsv.path)],
-                          text: 'Laporan KasKelasKu',
-                          sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('PDF dan CSV siap dibagikan.')));
-                      }
-                    } finally {
-                      await Exports.cleanupPlaintext();
+                    await Share.shareXFiles(
+                        [XFile(sharedPdf.path), XFile(sharedCsv.path)],
+                        text: 'Laporan KasKelasKu',
+                        sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text(
+                              'PDF dan CSV siap dibagikan. File tersedia selama proses berbagi.')));
                     }
                   }),
           child: const Text('Buat PDF dan CSV terenkripsi')),

@@ -100,8 +100,8 @@ void main() {
     expect(files, hasLength(2));
     expect((files.first as String), endsWith('KasKelasKu.pdf'));
     expect((files.last as String), endsWith('KasKelasKu.csv'));
-    expect(File(files.first as String).existsSync(), false);
-    expect(File(files.last as String).existsSync(), false);
+    expect(File(files.first as String).existsSync(), true);
+    expect(File(files.last as String).existsSync(), true);
     expect(find.text('Selesai.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
