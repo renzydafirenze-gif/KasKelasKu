@@ -1,0 +1,17 @@
+.dart_tool/
+.flutter-plugins*
+.packages
+build/
+coverage/
+android/local.properties
+ios/Pods/
+ios/.symlinks/
+*.jks
+*.keystore
+dist/
+android/key.properties
+
+/kaskelasku-production.jks
+*.jks
+*.keystore
+*.env

@@ -1,0 +1,60 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def releaseStore = System.getenv("KASKELASKU_KEYSTORE")
+def releaseStorePassword = System.getenv("KASKELASKU_STORE_PASSWORD")
+def releaseAlias = System.getenv("KASKELASKU_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("KASKELASKU_KEY_PASSWORD")
+def hasReleaseSigning = [releaseStore, releaseStorePassword, releaseAlias, releaseKeyPassword].every { it }
+
+android {
+    namespace = "id.kaskelasku.kaskelasku"
+    compileSdk = 34
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId = "id.kaskelasku.kaskelasku"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = 23
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            production {
+                storeFile file(releaseStore)
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Without credentials, deliberately produce unsigned artifact.
+            if (hasReleaseSigning) signingConfig signingConfigs.production
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
