@@ -1,303 +1,381 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import 'data/vault.dart';
-import 'data/exports.dart';
+import 'data/repository.dart';
 import 'models.dart';
 import 'view_model.dart';
 
+const String appVersion = '1.2.0';
+
+// coverage:ignore-start
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: KasKelasKuApp()));
 }
+// coverage:ignore-end
 
 String rupiah(int amount) =>
     NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0)
         .format(amount);
 
+const _months = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember'
+];
+const _monthsShort = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des'
+];
+
+String monthLabel(String period) =>
+    '${_months[int.parse(period.substring(5, 7)) - 1]} ${period.substring(0, 4)}';
+
+String shortMonthLabel(String period) =>
+    '${_monthsShort[int.parse(period.substring(5, 7)) - 1]} ${period.substring(2, 4)}';
+
+String dateLabel(String iso) {
+  final date = DateTime.parse(iso);
+  return '${date.day} ${_monthsShort[date.month - 1]} ${date.year}';
+}
+
+String periodOf(DateTime date) => monthOf(date);
+
 Future<void> showError(BuildContext context, Object error) async {
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(error is AppError
-          ? error.message
-          : 'Operasi gagal. Data lama tetap tersimpan. Periksa penyimpanan atau cadangan.')));
+  final message = error is AppError
+      ? error.message
+      : 'Operasi gagal. Data lama tetap tersimpan.';
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 
-class KasKelasKuApp extends StatefulHookConsumerWidget {
+Future<void> showInfo(BuildContext context, String message) async {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+ThemeData _theme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF0F766E), brightness: brightness);
+  final base = ThemeData(
+      useMaterial3: true, colorScheme: scheme, brightness: brightness);
+  final text = base.textTheme.copyWith(
+    headlineLarge: base.textTheme.headlineLarge
+        ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1),
+    headlineMedium: base.textTheme.headlineMedium
+        ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6),
+    titleLarge:
+        base.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+    titleMedium:
+        base.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+    labelLarge:
+        base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+  );
+  return base.copyWith(
+    scaffoldBackgroundColor:
+        dark ? const Color(0xFF0E1413) : const Color(0xFFF4F7F5),
+    textTheme: text,
+    cardTheme: CardTheme(
+        elevation: 0,
+        color: dark ? const Color(0xFF18201F) : Colors.white,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24))),
+    appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface)),
+    inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: dark ? const Color(0xFF1F2827) : Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: scheme.primary, width: 1.5))),
+    filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 52),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700))),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 52),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            textStyle: const TextStyle(fontWeight: FontWeight.w600))),
+    navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: dark ? const Color(0xFF141B1A) : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: scheme.primaryContainer,
+        elevation: 0,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow),
+    dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withOpacity(0.4), space: 1, thickness: 1),
+    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+  );
+}
+
+class KasKelasKuApp extends HookConsumerWidget {
   const KasKelasKuApp({super.key});
   @override
-  ConsumerState<KasKelasKuApp> createState() => _KasKelasKuAppState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dark = ref.watch(darkModeProvider);
+    return MaterialApp(
+      title: 'KasKelasKu',
+      debugShowCheckedModeBanner: false,
+      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+      theme: _theme(Brightness.light),
+      darkTheme: _theme(Brightness.dark),
+      home: const _Gate(),
+    );
+  }
 }
 
-class _KasKelasKuAppState extends ConsumerState<KasKelasKuApp>
-    with WidgetsBindingObserver {
-  Timer? _timer;
-  Timer? _sessionCheck;
-  bool _checking = false;
-  final _navigator = GlobalKey<NavigatorState>();
-  void _touch() {
-    _timer?.cancel();
-    if (ref.read(sessionProvider) != null) {
-      _timer = Timer(const Duration(minutes: 3), _lock);
-    }
-  }
+class _Gate extends ConsumerStatefulWidget {
+  const _Gate();
+  @override
+  ConsumerState<_Gate> createState() => _GateState();
+}
 
-  Future<void> _lock() async {
-    _navigator.currentState?.popUntil((route) => route.isFirst);
-    ref.read(sessionProvider.state).state = null;
-    await ref.read(treasuryProvider).repository.lock();
-  }
-
-  Future<void> _refreshSession() async {
-    if (_checking || ref.read(sessionProvider) == null) return;
-    _checking = true;
-    try {
-      final member =
-          await ref.read(treasuryProvider).repository.currentMember();
-      final previous = ref.read(sessionProvider);
-      if (previous?.id != member.id || previous?.role != member.role) {
-        await _lock();
-      }
-    } catch (_) {
-      await _lock();
-    } finally {
-      _checking = false;
-    }
-  }
+class _GateState extends ConsumerState<_Gate> {
+  bool _loading = true;
+  Member? _user;
+  Object? _error;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _sessionCheck =
-        Timer.periodic(const Duration(seconds: 2), (_) => _refreshSession());
+    _load();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      unawaited(_lock());
+  Future<void> _load() async {
+    try {
+      final user = await ref.read(treasuryProvider).repository.open();
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _error = null;
+        _loading = false;
+      });
+      ref.read(sessionProvider.state).state = user;
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
     }
   }
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    _sessionCheck?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
+  Widget build(BuildContext context) {
+    if (_loading) return const _Splash();
+    if (_error != null) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.storage_outlined, size: 56),
+                const SizedBox(height: 16),
+                const Text('Data tidak bisa dibuka.',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                const Text('Data lama tetap tersimpan. Coba lagi.',
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                FilledButton(onPressed: _load, child: const Text('Coba lagi')),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
+    final user = _user;
+    if (user == null) {
+      return OnboardingScreen(onCreated: (member) {
+        setState(() => _user = member);
+        ref.read(sessionProvider.state).state = member;
+      });
+    }
+    return const HomeScreen();
   }
+}
 
+class _Splash extends StatelessWidget {
+  const _Splash();
   @override
   Widget build(BuildContext context) {
-    final dark = ref.watch(darkModeProvider);
-    final user = ref.watch(sessionProvider);
-    useEffect(() {
-      _touch();
-      return null;
-    }, [user]);
-    useEffect(() {
-      Exports.cleanupPlaintext().catchError((Object _) {});
-      Vault.storage.read(key: 'setting:dark').then((value) {
-        if (mounted && value != null) {
-          ref.read(darkModeProvider.state).state = value == 'true';
-        }
-      }).catchError((Object _) {});
-      return null;
-    }, const []);
-    useEffect(() {
-      if (user != null) {
-        ref
-            .read(treasuryProvider)
-            .exports
-            .automaticReports(DateTime.now())
-            .catchError((Object _) {});
-      }
-      final timer = Timer.periodic(const Duration(minutes: 1), (_) {
-        if (ref.read(sessionProvider) != null) {
-          ref
-              .read(treasuryProvider)
-              .exports
-              .automaticReports(DateTime.now())
-              .catchError((Object _) {});
-        }
-      });
-      return timer.cancel;
-    }, [user?.id]);
-    return Listener(
-      onPointerDown: (_) => _touch(),
-      onPointerMove: (_) => _touch(),
-      child: Focus(
-        onKeyEvent: (_, __) {
-          _touch();
-          return KeyEventResult.ignored;
-        },
-        child: MaterialApp(
-          navigatorKey: _navigator,
-          title: 'KasKelasKu',
-          debugShowCheckedModeBanner: false,
-          themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-          theme: ThemeData(
-              useMaterial3: true,
-              colorScheme:
-                  ColorScheme.fromSeed(seedColor: const Color(0xFF005F73))),
-          darkTheme: ThemeData(
-              useMaterial3: true,
-              brightness: Brightness.dark,
-              scaffoldBackgroundColor: const Color(0xFF0B0F19),
-              colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFF00F5D4),
-                  brightness: Brightness.dark)),
-          home: user == null ? const LoginScreen() : const HomeScreen(),
-        ),
+    return Scaffold(
+      body: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const _Logo(size: 64),
+          const SizedBox(height: 20),
+          Text('KasKelasKu',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+          const SizedBox(height: 24),
+          const SizedBox(
+              width: 24, height: 24, child: CircularProgressIndicator()),
+        ]),
       ),
     );
   }
 }
 
-class LoginScreen extends HookConsumerWidget {
-  const LoginScreen({super.key});
+class _Logo extends StatelessWidget {
+  const _Logo({this.size = 48});
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+          gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [scheme.primary, scheme.primary.withOpacity(0.72)]),
+          borderRadius: BorderRadius.circular(size * 0.3)),
+      child: Icon(Icons.savings_outlined,
+          color: scheme.onPrimary, size: size * 0.5),
+    );
+  }
+}
+
+class OnboardingScreen extends HookConsumerWidget {
+  const OnboardingScreen({super.key, required this.onCreated});
+  final ValueChanged<Member> onCreated;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(treasuryProvider).repository;
-    final accounts = useMemoized(repo.vault.accounts);
-    final ids = useFuture(accounts);
-    final selected = useState<String?>(null);
-    final role = useState(Role.bendahara);
     final name = useTextEditingController();
-    final password = useTextEditingController();
     final busy = useState(false);
-    final setup = ids.hasData && ids.data!.isEmpty;
+    final theme = Theme.of(context);
     return Scaffold(
-        body: SafeArea(
-            child: Center(
-                child: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: AutofillGroup(
-            child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Icon(Icons.account_balance_wallet_outlined, size: 56),
-            const SizedBox(height: 24),
-            Text('KasKelasKu',
-                style: Theme.of(context).textTheme.headlineLarge,
-                textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-            Text(
-                setup
-                    ? 'Buat brankas kelas · Bendahara pertama'
-                    : 'Brankas lokal · Tanpa koneksi internet',
-                textAlign: TextAlign.center),
-            const SizedBox(height: 32),
-            if (ids.hasError)
-              const Text(
-                  'Penyimpanan kunci gagal dibuka. Jangan hapus data aplikasi.'),
-            if (!ids.hasData && !ids.hasError) const LinearProgressIndicator(),
-            if (setup)
-              TextField(
-                  controller: name,
-                  decoration:
-                      const InputDecoration(labelText: 'Nama Bendahara')),
-            if (!setup && ids.hasData)
-              DropdownButtonFormField<String>(
-                  key: const Key('transaction_type_input'),
-                  isExpanded: true,
-                  value: selected.value ?? ids.data!.first,
-                  decoration: const InputDecoration(labelText: 'ID akun'),
-                  items: ids.data!
-                      .map((id) => DropdownMenuItem(
-                          value: id,
-                          child: Text(id, overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: busy.value ? null : (id) => selected.value = id),
-            if (!setup)
-              DropdownButtonFormField<Role>(
-                  value: role.value,
-                  decoration:
-                      const InputDecoration(labelText: 'Peran terdaftar'),
-                  items: Role.values
-                      .map((r) =>
-                          DropdownMenuItem(value: r, child: Text(r.label)))
-                      .toList(),
-                  onChanged: busy.value
-                      ? null
-                      : (value) {
-                          if (value != null) role.value = value;
-                        }),
-            const SizedBox(height: 16),
-            TextField(
-                controller: password,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                autofillHints: [
-                  setup ? AutofillHints.newPassword : AutofillHints.password
-                ],
-                decoration: InputDecoration(
-                    labelText: 'Kata sandi',
-                    helperText: setup
-                        ? 'Minimal 12 karakter. Tidak ada kata sandi bawaan.'
-                        : null)),
-            const SizedBox(height: 24),
-            FilledButton(
-                onPressed: busy.value || !ids.hasData
-                    ? null
-                    : () async {
-                        busy.value = true;
-                        try {
-                          final member = setup
-                              ? await repo.setup(name.text, password.text)
-                              : await repo.login(
-                                  selected.value ?? ids.data!.first,
-                                  password.text,
-                                  role.value);
-                          password.clear();
-                          ref.read(sessionProvider.state).state = member;
-                        } catch (error) {
-                          if (context.mounted) await showError(context, error);
-                        } finally {
-                          if (context.mounted) busy.value = false;
-                        }
-                      },
-                child: Text(busy.value
-                    ? 'Membuka brankas…'
-                    : setup
-                        ? 'Buat brankas'
-                        : 'Masuk')),
-            const SizedBox(height: 16),
-            if (!setup && repo.canResumeBiometric)
-              OutlinedButton(
-                  onPressed: busy.value
-                      ? null
-                      : () async {
-                          busy.value = true;
-                          try {
-                            final member = await repo.resumeBiometric();
-                            ref.read(sessionProvider.state).state = member;
-                          } catch (error) {
-                            if (context.mounted) {
-                              await showError(context, error);
-                            }
-                          } finally {
-                            if (context.mounted) busy.value = false;
-                          }
-                        },
-                  child: const Text('Buka akun terakhir dengan biometrik')),
-            const Text(
-                'Pemilihan peran tidak memberi izin baru. Peran selalu diperiksa dari database.',
-                textAlign: TextAlign.center),
-          ],
-        )),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Center(child: _Logo(size: 72)),
+                    const SizedBox(height: 28),
+                    Text('KasKelasKu',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineLarge),
+                    const SizedBox(height: 8),
+                    Text('Catatan kas kelas yang rapi, cepat, dan offline.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                    const SizedBox(height: 32),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text('Mulai', style: theme.textTheme.titleLarge),
+                              const SizedBox(height: 4),
+                              Text('Kamu akan menjadi Bendahara.',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant)),
+                              const SizedBox(height: 20),
+                              TextField(
+                                key: const Key('owner_name_input'),
+                                controller: name,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: const InputDecoration(
+                                    labelText: 'Nama kamu',
+                                    hintText: 'Contoh: Budi'),
+                                onSubmitted: (_) => _create(
+                                    context, ref, name, busy, onCreated),
+                              ),
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                key: const Key('start_btn'),
+                                onPressed: busy.value
+                                    ? null
+                                    : () => _create(
+                                        context, ref, name, busy, onCreated),
+                                child:
+                                    Text(busy.value ? 'Menyiapkan…' : 'Mulai'),
+                              ),
+                            ]),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text('Data disimpan di perangkat ini.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                  ]),
+            ),
+          ),
+        ),
       ),
-    ))));
+    );
+  }
+
+  Future<void> _create(
+      BuildContext context,
+      WidgetRef ref,
+      TextEditingController name,
+      ValueNotifier<bool> busy,
+      ValueChanged<Member> onCreated) async {
+    busy.value = true;
+    try {
+      final member =
+          await ref.read(treasuryProvider).repository.createOwner(name.text);
+      onCreated(member);
+    } catch (error) {
+      if (context.mounted) await showError(context, error);
+    } finally {
+      busy.value = false;
+    }
   }
 }
 
@@ -306,103 +384,535 @@ class HomeScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final page = useState(0);
-    final user = ref.watch(sessionProvider)!;
-    final model = ref.watch(treasuryProvider);
+    final user = ref.watch(sessionProvider);
+    if (user == null) return const SizedBox();
+    final canWrite = user.role == Role.bendahara;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: Text('KasKelasKu · ${user.role.label}'), actions: [
-        IconButton(
-            tooltip: 'Kunci aplikasi',
-            icon: const Icon(Icons.lock_outline),
-            onPressed: () async {
-              ref.read(sessionProvider.state).state = null;
-              await model.repository.lock();
-            }),
-      ]),
+      appBar: AppBar(
+        titleSpacing: 20,
+        title: const Row(children: [
+          _Logo(size: 32),
+          SizedBox(width: 10),
+          Flexible(
+              child: Text('KasKelasKu',
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ]),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: ActionChip(
+              avatar: CircleAvatar(
+                  backgroundColor: scheme.primaryContainer,
+                  child: Text(
+                      user.name.trim().isEmpty
+                          ? '?'
+                          : user.name.trim()[0].toUpperCase(),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onPrimaryContainer))),
+              label: Text('${user.name.split(' ').first} · ${user.role.label}',
+                  style: const TextStyle(fontSize: 12)),
+              onPressed: () => _showUserSheet(context, ref),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
-          child: Center(
-              child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 960),
-                  child: [
-                    const DashboardScreen(),
-                    const HistoryScreen(),
-                    const ReportsScreen(),
-                    const MembersScreen(),
-                    const SettingsScreen()
-                  ][page.value]))),
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: switch (page.value) {
+              0 => DashboardScreen(onSeeAll: () => page.value = 1),
+              1 => const HistoryScreen(),
+              2 => const ReportsScreen(),
+              3 => const MembersScreen(),
+              _ => const SettingsScreen(),
+            },
+          ),
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
-          selectedIndex: page.value,
-          onDestinationSelected: (value) => page.value = value,
-          destinations: const [
-            NavigationDestination(
-                icon: Icon(Icons.dashboard_outlined), label: 'Ringkasan'),
-            NavigationDestination(
-                icon: Icon(Icons.receipt_long_outlined), label: 'Riwayat'),
-            NavigationDestination(
-                icon: Icon(Icons.description_outlined), label: 'Laporan'),
-            NavigationDestination(
-                icon: Icon(Icons.people_outline), label: 'Anggota'),
-            NavigationDestination(
-                icon: Icon(Icons.settings_outlined), label: 'Setelan'),
-          ]),
-      floatingActionButton: user.role == Role.bendahara && page.value < 2
+        selectedIndex: page.value,
+        onDestinationSelected: (value) => page.value = value,
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.space_dashboard_outlined),
+              selectedIcon: Icon(Icons.space_dashboard),
+              label: 'Ringkasan'),
+          NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'Riwayat'),
+          NavigationDestination(
+              icon: Icon(Icons.summarize_outlined),
+              selectedIcon: Icon(Icons.summarize),
+              label: 'Laporan'),
+          NavigationDestination(
+              icon: Icon(Icons.group_outlined),
+              selectedIcon: Icon(Icons.group),
+              label: 'Anggota'),
+          NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: 'Setelan'),
+        ],
+      ),
+      floatingActionButton: canWrite && page.value < 2
           ? FloatingActionButton.extended(
-              onPressed: () => showDialog<void>(
-                  context: context, builder: (_) => const TransactionEntry()),
+              key: const Key('add_transaction_btn'),
+              onPressed: () => openTransactionEntry(context),
               icon: const Icon(Icons.add),
-              label: const Text('Transaksi'))
+              label: const Text('Catat'))
           : null,
     );
   }
 }
 
+Future<void> openTransactionEntry(BuildContext context,
+    {String initialType = 'IN'}) {
+  return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TransactionEntry(initialType: initialType));
+}
+
+Future<void> _showUserSheet(BuildContext context, WidgetRef ref) async {
+  final model = ref.read(treasuryProvider);
+  final List<Member> members;
+  try {
+    members = await model.repository.members();
+  } catch (error) {
+    if (context.mounted) await showError(context, error);
+    return;
+  }
+  if (!context.mounted) return;
+  await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(children: [
+                Text('Ganti pengguna',
+                    style: Theme.of(sheetContext).textTheme.titleLarge),
+              ]),
+            ),
+            for (final member in members.where((m) => m.active))
+              RadioListTile<String>(
+                  value: member.id,
+                  groupValue: ref.read(sessionProvider)?.id,
+                  title: Text(member.name),
+                  subtitle: Text(member.role.label),
+                  onChanged: (id) async {
+                    if (id == null) return;
+                    try {
+                      final active = await model.repository.switchUser(id);
+                      ref.read(sessionProvider.state).state = active;
+                      if (sheetContext.mounted) {
+                        Navigator.pop(sheetContext);
+                      }
+                    } catch (error) {
+                      if (sheetContext.mounted) {
+                        await showError(sheetContext, error);
+                      }
+                    }
+                  }),
+            const SizedBox(height: 8),
+          ])));
+}
+
 class DashboardScreen extends HookConsumerWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onSeeAll});
+  final VoidCallback? onSeeAll;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(treasuryProvider).repository;
+    final model = ref.watch(treasuryProvider);
     final revision = ref.watch(revisionProvider);
-    final future = useMemoized(
-        () async => (await repo.balance(), await repo.trends()), [revision]);
+    final user = ref.watch(sessionProvider);
+    final tick = useState(0);
+    final period = periodOf(DateTime.now());
+    final future = useMemoized(() async {
+      final data = await model.repository.overview(period);
+      final members = await model.repository.members();
+      return (data, members);
+    }, [revision, period, tick.value]);
     final snapshot = useFuture(future);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     if (snapshot.hasError) {
-      return const Center(
-          child: Text('Ringkasan gagal dimuat. Masuk kembali.'));
+      return Center(
+          child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.error_outline, size: 40),
+                const SizedBox(height: 12),
+                const Text('Ringkasan gagal dimuat.'),
+                const SizedBox(height: 16),
+                FilledButton(
+                    onPressed: () => tick.value++,
+                    child: const Text('Muat ulang')),
+              ])));
     }
     if (!snapshot.hasData) {
       return const Center(child: CircularProgressIndicator());
     }
-    final (balance, trends) = snapshot.data!;
-    final points = trends.map((r) => (r['net']! as int).toDouble()).toList();
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      Text('SALDO KELAS', style: Theme.of(context).textTheme.labelLarge),
-      const SizedBox(height: 8),
-      Semantics(
-          liveRegion: true,
-          child: Text(rupiah(balance),
-              style: Theme.of(context).textTheme.headlineLarge)),
-      const SizedBox(height: 32),
-      Text('Arus kas bersih per bulan',
-          style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 24),
-      if (points.isEmpty)
-        const Text('Belum ada transaksi.')
-      else ...[
-        ExcludeSemantics(
-            child: SizedBox(
-                height: 160,
-                child: CustomPaint(
-                    painter: TrendPainter(
-                        points, Theme.of(context).colorScheme.primary)))),
-        const SizedBox(height: 16),
-        for (final row in trends)
-          ListTile(
-              title: Text(row['period']! as String),
-              trailing: Text(rupiah(row['net']! as int))),
-      ],
-      const SizedBox(height: 32),
-      const Text(
-          'Data hanya tersimpan di perangkat ini. Buat cadangan terenkripsi secara rutin.'),
+    final (data, _) = snapshot.data!;
+    final canWrite = user?.role == Role.bendahara;
+    final progress =
+        data.target == 0 ? 0.0 : (data.paid / data.target).clamp(0.0, 1.0);
+    final paid = data.paid >= data.target && data.target > 0;
+    final points = data.trends
+        .map((row) => (row['net']! as int).toDouble())
+        .toList()
+        .reversed
+        .take(6)
+        .toList()
+        .reversed
+        .toList();
+    return RefreshIndicator(
+      onRefresh: () async {
+        tick.value++;
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+        children: [
+          Text('Halo, ${user?.name.split(' ').first ?? 'Bendahara'}',
+              style: theme.textTheme.headlineMedium),
+          const SizedBox(height: 4),
+          Text('Ini kondisi kas kelasmu hari ini.',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [scheme.primary, const Color(0xFF115E59)]),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                    color: scheme.primary.withOpacity(0.25),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10))
+              ],
+            ),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.account_balance_wallet_outlined,
+                    color: Colors.white.withOpacity(0.8), size: 18),
+                const SizedBox(width: 8),
+                Text('Saldo kelas',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontWeight: FontWeight.w600)),
+              ]),
+              const SizedBox(height: 10),
+              Text(rupiah(data.balance),
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                      color: Colors.white,
+                      fontSize: 36,
+                      fontWeight: FontWeight.w800)),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(
+                    child: _MoneyPill(
+                        icon: Icons.south_west,
+                        label: 'Masuk',
+                        amount: data.income)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: _MoneyPill(
+                        icon: Icons.north_east,
+                        label: 'Keluar',
+                        amount: data.expense)),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          if (canWrite)
+            Row(children: [
+              Expanded(
+                  child: _QuickAction(
+                      icon: Icons.add_circle_outline,
+                      label: 'Uang masuk',
+                      color: scheme.primary,
+                      background: scheme.primaryContainer,
+                      onTap: () => openTransactionEntry(context))),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _QuickAction(
+                      icon: Icons.remove_circle_outline,
+                      label: 'Uang keluar',
+                      color: scheme.error,
+                      background: scheme.errorContainer,
+                      onTap: () =>
+                          openTransactionEntry(context, initialType: 'OUT'))),
+            ]),
+          const SizedBox(height: 24),
+          _SectionTitle('Target ${monthLabel(period)}',
+              action: canWrite
+                  ? TextButton(
+                      key: const Key('edit_target_btn'),
+                      onPressed: () =>
+                          showTargetSheet(context, ref, period, data.target),
+                      child: const Text('Atur'))
+                  : null),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: data.target == 0
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                          Text('Belum ada target bulan ini',
+                              style: theme.textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          Text(
+                              'Tentukan target kas agar progress kelas terlihat.',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant)),
+                          const SizedBox(height: 12),
+                          if (canWrite)
+                            OutlinedButton.icon(
+                                onPressed: () => showTargetSheet(
+                                    context, ref, period, data.target),
+                                icon: const Icon(Icons.flag_outlined),
+                                label: const Text('Tentukan target')),
+                        ])
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                          Row(children: [
+                            Expanded(
+                                child: Text(rupiah(data.paid),
+                                    style: theme.textTheme.headlineMedium)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                  color: paid
+                                      ? scheme.primaryContainer
+                                      : scheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(20)),
+                              child: Text(paid ? 'Lunas' : 'Belum lunas',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: paid
+                                          ? scheme.onPrimaryContainer
+                                          : scheme.onSurfaceVariant)),
+                            )
+                          ]),
+                          const SizedBox(height: 2),
+                          Text('dari target ${rupiah(data.target)}',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant)),
+                          const SizedBox(height: 14),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 10,
+                                backgroundColor:
+                                    scheme.surfaceContainerHighest),
+                          ),
+                          const SizedBox(height: 8),
+                          Text('${(progress * 100).round()}% terkumpul',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+            ),
+          ),
+          if (points.length > 1) ...[
+            const SizedBox(height: 24),
+            const _SectionTitle('Tren kas'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
+                    height: 90,
+                    child: CustomPaint(
+                        painter: TrendPainter(points, scheme.primary),
+                        child: const SizedBox.expand())),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          _SectionTitle('Transaksi terakhir',
+              action: TextButton(
+                  onPressed: onSeeAll, child: const Text('Lihat semua'))),
+          const SizedBox(height: 8),
+          if (data.recent.isEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(children: [
+                  Icon(Icons.receipt_long_outlined,
+                      size: 40, color: scheme.onSurfaceVariant),
+                  const SizedBox(height: 12),
+                  Text('Belum ada transaksi',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text('Mulai catat uang masuk kelas.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                  if (canWrite) ...[
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                        onPressed: () => openTransactionEntry(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Catat transaksi')),
+                  ],
+                ]),
+              ),
+            )
+          else
+            Card(
+              child: Column(children: [
+                for (var i = 0; i < data.recent.length; i++) ...[
+                  if (i > 0) const Divider(indent: 68, endIndent: 16),
+                  TransactionTile(entry: data.recent[i]),
+                ],
+              ]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoneyPill extends StatelessWidget {
+  const _MoneyPill(
+      {required this.icon, required this.label, required this.amount});
+  final IconData icon;
+  final String label;
+  final int amount;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.14),
+          borderRadius: BorderRadius.circular(14)),
+      child: Row(children: [
+        Icon(icon, size: 14, color: Colors.white.withOpacity(0.9)),
+        const SizedBox(width: 6),
+        Flexible(
+            child: Text('$label ${rupiah(amount)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600))),
+      ]),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction(
+      {required this.icon,
+      required this.label,
+      required this.color,
+      required this.background,
+      required this.onTap});
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color background;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          child: Row(children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text(label,
+                    style:
+                        TextStyle(color: color, fontWeight: FontWeight.w700))),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title, {this.action});
+  final String title;
+  final Widget? action;
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(
+          child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+      if (action != null) action!,
     ]);
+  }
+}
+
+class TransactionTile extends StatelessWidget {
+  const TransactionTile({super.key, required this.entry, this.onDelete});
+  final CashTransaction entry;
+  final VoidCallback? onDelete;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = entry.isIncome ? scheme.primary : scheme.error;
+    final subtitle = [
+      dateLabel(entry.date),
+      if (entry.isIncome && entry.contributorName != null)
+        entry.contributorName!
+      else
+        entry.description
+    ].join(' · ');
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.12),
+          child: Icon(entry.isIncome ? Icons.south_west : Icons.north_east,
+              color: color, size: 20)),
+      title: Text(entry.category, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('${entry.isIncome ? '+' : '-'}${rupiah(entry.amount)}',
+            style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+        if (onDelete != null)
+          IconButton(
+              key: const Key('delete_tx_btn'),
+              tooltip: 'Hapus transaksi',
+              onPressed: onDelete,
+              icon: const Icon(Icons.more_vert, size: 20)),
+      ]),
+    );
   }
 }
 
@@ -417,161 +927,44 @@ class TrendPainter extends CustomPainter {
     final max = points.reduce((a, b) => a > b ? a : b);
     final span = max == min ? 1.0 : max - min;
     final path = Path();
+    final area = Path();
     for (var i = 0; i < points.length; i++) {
       final x = points.length == 1
           ? size.width / 2
           : i * size.width / (points.length - 1);
-      final y = 8 + (size.height - 16) * (1 - (points[i] - min) / span);
+      final y = 8 + (size.height - 20) * (1 - (points[i] - min) / span);
       if (i == 0) {
         path.moveTo(x, y);
+        area.moveTo(x, size.height);
+        area.lineTo(x, y);
       } else {
         path.lineTo(x, y);
+        area.lineTo(x, y);
       }
       canvas.drawCircle(Offset(x, y), 4, Paint()..color = color);
     }
+    area.lineTo(size.width, size.height);
+    area.close();
+    canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [color.withOpacity(0.25), color.withOpacity(0)])
+              .createShader(Offset.zero & size));
     canvas.drawPath(
         path,
         Paint()
           ..color = color
           ..strokeWidth = 3
-          ..style = PaintingStyle.stroke);
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round);
   }
 
   @override
   bool shouldRepaint(TrendPainter oldDelegate) =>
       oldDelegate.points != points || oldDelegate.color != color;
-}
-
-class TransactionEntry extends HookConsumerWidget {
-  const TransactionEntry({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final amount = useTextEditingController();
-    final category = useTextEditingController();
-    final description = useTextEditingController();
-    final date = useTextEditingController(text: isoDate(DateTime.now()));
-    final type = useState('IN');
-    final busy = useState(false);
-    final members = useFuture(
-        useMemoized(() => ref.read(treasuryProvider).repository.members()));
-    final contributor = useState<String?>(null);
-    final token = useMemoized(Vault.token);
-    return AlertDialog(
-        title: const Text('Catat transaksi'),
-        content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                  key: const Key('amount_input'),
-                  controller: amount,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: 'Nominal rupiah',
-                      helperText: 'Bilangan bulat lebih dari nol')),
-              DropdownButtonFormField<String>(
-                  key: const Key('transaction_type_input'),
-                  value: type.value,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Jenis'),
-                  items: const [
-                    DropdownMenuItem(value: 'IN', child: Text('Pemasukan')),
-                    DropdownMenuItem(value: 'OUT', child: Text('Pengeluaran'))
-                  ],
-                  onChanged: busy.value
-                      ? null
-                      : (value) {
-                          if (value != null) type.value = value;
-                        }),
-              if (type.value == 'IN')
-                // coverage:ignore-start
-                DropdownButtonFormField<String>(
-                    key: const Key('contributor_input'),
-                    value: contributor.value,
-                    isExpanded: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Nama penyetor'),
-                    items: (members.data ?? <Member>[])
-                        .where((member) =>
-                            member.role == Role.siswa && member.active)
-                        .map((member) => DropdownMenuItem(
-                            value: member.id, child: Text(member.name)))
-                        .toList(),
-                    onChanged: (value) => contributor.value = value),
-              // coverage:ignore-end
-              TextField(
-                  controller: category,
-                  maxLength: 80,
-                  decoration:
-                      const InputDecoration(labelText: 'Kategori / tujuan')),
-              TextField(
-                  controller: date,
-                  decoration: const InputDecoration(
-                      labelText: 'Tanggal', hintText: 'YYYY-MM-DD')),
-              TextField(
-                  key: const Key('description_input'),
-                  controller: description,
-                  maxLength: 1000,
-                  decoration: const InputDecoration(labelText: 'Keterangan'),
-                  minLines: 1,
-                  maxLines: 4),
-            ]))),
-        actions: [
-          TextButton(
-              onPressed: busy.value ? null : () => Navigator.pop(context),
-              child: const Text('Batal')),
-          FilledButton(
-              key: const Key('submit_tx_btn'),
-              onPressed: busy.value
-                  ? null
-                  : () async {
-                      busy.value = true;
-                      final entry = CashTransaction(
-                          amount: int.tryParse(amount.text) ?? 0,
-                          type: type.value,
-                          category: category.text,
-                          contributorId:
-                              type.value == 'IN' ? contributor.value : null,
-                          date: date.text,
-                          description: description.text);
-                      try {
-                        final repo = ref.read(treasuryProvider).repository;
-                        try {
-                          await repo.addTransaction(entry, token);
-                        } on DuplicateTransaction {
-                          if (!context.mounted) return;
-                          final confirmed = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                      title: const Text(
-                                          'Transaksi serupa ditemukan'),
-                                      content: const Text(
-                                          'Pastikan pembayaran ini berbeda sebelum menyimpan.'),
-                                      actions: [
-                                        TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, false),
-                                            child: const Text('Batal')),
-                                        FilledButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, true),
-                                            child: const Text(
-                                                'Simpan pembayaran berbeda'))
-                                      ]));
-                          if (confirmed != true) return;
-                          await repo.addTransaction(entry, token,
-                              confirmDuplicate: true);
-                        }
-                        if (context.mounted) Navigator.pop(context);
-                      } catch (error) {
-                        if (context.mounted) await showError(context, error);
-                      } finally {
-                        if (context.mounted) busy.value = false;
-                      }
-                    },
-              child: Text(busy.value ? 'Menyimpan…' : 'Simpan')),
-        ]);
-  }
 }
 
 class HistoryScreen extends HookConsumerWidget {
@@ -581,117 +974,148 @@ class HistoryScreen extends HookConsumerWidget {
     final repo = ref.watch(treasuryProvider).repository;
     final revision = ref.watch(revisionProvider);
     final keyword = useTextEditingController();
-    final category = useTextEditingController();
-    final from = useTextEditingController();
-    final to = useTextEditingController();
-    final filter = useState(0);
+    final query = useState('');
+    final month = useState<String?>(null);
     final page = useState(0);
-    final future = useMemoized(
-        () => repo.history(
-            keyword: keyword.text,
-            category: category.text,
-            from: from.text.isEmpty ? null : from.text,
-            to: to.text.isEmpty ? null : to.text,
-            offset: page.value * 100),
-        [revision, filter.value, page.value]);
-    final snapshot = useFuture(future);
+    final limit = (page.value + 1) * 100;
     final canDelete = ref.watch(sessionProvider)?.role == Role.bendahara;
+    final future = useMemoized(() {
+      final from = month.value == null ? null : '${month.value}-01';
+      final to = month.value == null
+          ? null
+          : isoDate(DateTime(int.parse(month.value!.substring(0, 4)),
+              int.parse(month.value!.substring(5, 7)) + 1, 0));
+      return repo.history(
+          keyword: query.value, from: from, to: to, limit: limit);
+    }, [revision, query.value, month.value, page.value]);
+    final snapshot = useFuture(future);
+    final months = <String?>[
+      null,
+      for (var i = 0; i < 6; i++)
+        periodOf(DateTime(DateTime.now().year, DateTime.now().month - i, 1))
+    ];
+    final scheme = Theme.of(context).colorScheme;
     return Column(children: [
-      ExpansionTile(title: const Text('Filter riwayat'), children: [
-        Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(children: [
-              TextField(
-                  controller: keyword,
-                  maxLength: 100,
-                  decoration: const InputDecoration(
-                      labelText: 'Kata kunci keterangan')),
-              TextField(
-                  controller: category,
-                  decoration:
-                      const InputDecoration(labelText: 'Kategori persis')),
-              TextField(
-                  controller: from,
-                  decoration: const InputDecoration(
-                      labelText: 'Dari tanggal YYYY-MM-DD')),
-              TextField(
-                  controller: to,
-                  decoration: const InputDecoration(
-                      labelText: 'Sampai tanggal YYYY-MM-DD')),
-              FilledButton(
-                  onPressed: () {
-                    page.value = 0;
-                    filter.value++;
-                  },
-                  child: const Text('Terapkan')),
-            ]))
-      ]),
-      if (snapshot.hasError)
-        const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-                'Riwayat gagal dimuat. Periksa filter atau masuk kembali.')),
-      if (!snapshot.hasData && !snapshot.hasError)
-        const LinearProgressIndicator(),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Riwayat', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 14),
+          TextField(
+            key: const Key('history_search'),
+            controller: keyword,
+            onChanged: (value) {
+              page.value = 0;
+              query.value = value.trim();
+            },
+            decoration: InputDecoration(
+                hintText: 'Cari keterangan atau nama',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: query.value.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Hapus pencarian',
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          keyword.clear();
+                          page.value = 0;
+                          query.value = '';
+                        })),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 38,
+            child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: months.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final value = months[i];
+                  return ChoiceChip(
+                      label: Text(
+                          value == null ? 'Semua' : shortMonthLabel(value)),
+                      selected: month.value == value,
+                      onSelected: (_) {
+                        page.value = 0;
+                        month.value = value;
+                      });
+                }),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 8),
       Expanded(
-          child: ListView.builder(
-              itemCount: snapshot.data?.length ?? 0,
-              itemBuilder: (_, i) {
-                final entry = snapshot.data![i];
-                return ListTile(
-                    isThreeLine: true,
-                    title: Text(
-                        '${entry.type == 'IN' ? 'Masuk' : 'Keluar'} · ${rupiah(entry.amount)}'),
-                    subtitle: Text(
-                        '${entry.date} · ${entry.category}\n${entry.description}'),
-                    trailing: canDelete
-                        ? IconButton(
-                            tooltip: 'Hapus transaksi',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () async {
-                              final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                          title: const Text('Hapus transaksi?'),
-                                          content: const Text(
-                                              'Penghapusan tidak dapat dibatalkan dan dicatat dalam audit.'),
-                                          actions: [
-                                            TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, false),
-                                                child: const Text('Batal')),
-                                            FilledButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, true),
-                                                child: const Text('Hapus'))
-                                          ]));
-                              if (confirm == true) {
-                                try {
-                                  await repo.deleteTransaction(entry.id!);
-                                } catch (error) {
-                                  if (context.mounted) {
-                                    await showError(context, error);
-                                  }
-                                }
-                              }
-                            })
-                        : null);
-              })),
-      if (snapshot.hasData && snapshot.data!.isEmpty)
-        const Text('Tidak ada transaksi.'),
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        IconButton(
-            tooltip: 'Halaman sebelumnya',
-            onPressed: page.value == 0 ? null : () => page.value--,
-            icon: const Icon(Icons.chevron_left)),
-        Text('Halaman ${page.value + 1}'),
-        IconButton(
-            tooltip: 'Halaman berikutnya',
-            onPressed:
-                (snapshot.data?.length ?? 0) < 100 ? null : () => page.value++,
-            icon: const Icon(Icons.chevron_right)),
-      ]),
+        child: !snapshot.hasData && !snapshot.hasError
+            ? const Center(child: CircularProgressIndicator())
+            : snapshot.hasError
+                ? Center(
+                    child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text('Riwayat gagal dimuat. Periksa pencarian.',
+                            style: TextStyle(color: scheme.error))))
+                : snapshot.data!.isEmpty
+                    ? Center(
+                        child: Padding(
+                            padding: const EdgeInsets.all(28),
+                            child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.search_off,
+                                      size: 40, color: scheme.onSurfaceVariant),
+                                  const SizedBox(height: 12),
+                                  const Text('Tidak ada transaksi.'),
+                                ])))
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                        itemCount: snapshot.data!.length +
+                            (snapshot.data!.length == limit ? 1 : 0),
+                        itemBuilder: (_, i) {
+                          if (i == snapshot.data!.length) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: OutlinedButton(
+                                  onPressed: () => page.value++,
+                                  child: const Text('Muat lebih banyak')),
+                            );
+                          }
+                          final entry = snapshot.data![i];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Card(
+                                child: TransactionTile(
+                                    entry: entry,
+                                    onDelete: canDelete
+                                        ? () => _confirmDelete(
+                                            context, repo, entry.id!)
+                                        : null)),
+                          );
+                        }),
+      ),
     ]);
+  }
+
+  Future<void> _confirmDelete(
+      BuildContext context, TreasuryRepository repo, int id) async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: const Text('Hapus transaksi?'),
+                content: const Text(
+                    'Transaksi akan dihapus permanen dan dicatat di audit.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Batal')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Hapus'))
+                ]));
+    if (confirmed != true) return;
+    try {
+      await repo.deleteTransaction(id);
+    } catch (error) {
+      if (context.mounted) await showError(context, error);
+    }
   }
 }
 
@@ -700,107 +1124,332 @@ class ReportsScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final model = ref.watch(treasuryProvider);
-    final role = ref.watch(sessionProvider)!.role;
-    final period = useTextEditingController(text: monthOf(DateTime.now()));
-    final password = useTextEditingController();
+    final revision = ref.watch(revisionProvider);
+    final user = ref.watch(sessionProvider);
+    final period = useState(periodOf(DateTime.now()));
     final busy = useState(false);
-    final message = useState('');
+    final future = useMemoized(
+        () => model.repository.monthSnapshot(period.value),
+        [revision, period.value]);
+    final snapshot = useFuture(future);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     Future<void> run(Future<void> Function() action) async {
       busy.value = true;
       try {
         await action();
-        if (context.mounted) message.value = 'Selesai.';
+        if (context.mounted) await showInfo(context, 'Selesai.');
       } catch (error) {
         if (context.mounted) await showError(context, error);
       } finally {
-        if (context.mounted) busy.value = false;
+        busy.value = false;
       }
     }
 
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      Text('Laporan bulanan', style: Theme.of(context).textTheme.headlineSmall),
-      TextField(
-          controller: period,
-          decoration: const InputDecoration(labelText: 'Bulan YYYY-MM')),
-      TextField(
-          controller: password,
-          obscureText: true,
-          decoration: const InputDecoration(
-              labelText: 'Kata sandi ekspor minimal 12 karakter')),
-      const SizedBox(height: 24),
-      const Text(
-          'PDF dan CSV dibentuk dari snapshot yang sama, lalu disimpan terenkripsi. Bulan kosong menghasilkan laporan saldo awal/akhir tanpa transaksi.'),
-      /* coverage:ignore-start */ FutureBuilder<List<Map<String, Object?>>>(
-          future: model.repository.monthlyTargetStatus(period.text),
-          builder: (context, snapshot) =>
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const SizedBox(height: 16),
-                const Text('Target kas keseluruhan'),
-                // coverage:ignore-start
-                for (final row in snapshot.data ?? const [])
-                  Text(
-                      '${row['name']}: Rp ${row['paid']} / Rp ${row['target']} — '
-                      '${(row['paid']! as int) >= (row['target']! as int) ? 'Lunas' : 'Belum lunas'}')
-              ])), // coverage:ignore-end
-      /* coverage:ignore-end */
-      const SizedBox(height: 16),
-      FilledButton(
-          onPressed: busy.value
-              ? null
-              : () => run(() async {
-                    final exportPassword = password.text;
-                    final files =
-                        await model.exports.report(period.text, exportPassword);
-                    password.clear();
-                    final sharedPdf = await model.exports
-                        .decryptReport(files.pdf, exportPassword);
-                    final sharedCsv = await model.exports
-                        .decryptReport(files.csv, exportPassword);
-                    await Share.shareXFiles(
-                        [XFile(sharedPdf.path), XFile(sharedCsv.path)],
-                        text: 'Laporan KasKelasKu',
-                        sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text(
-                              'PDF dan CSV siap dibagikan. File tersedia selama proses berbagi.')));
-                    }
-                  }),
-          child: const Text('Buat PDF dan CSV terenkripsi')),
-      if (role == Role.ketua)
-        OutlinedButton(
-            onPressed: busy.value
-                ? null
-                : () async {
-                    final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                                title: const Text('Setujui dan kunci bulan?'),
-                                content: const Text(
-                                    'Seluruh transaksi bulan ini tidak dapat ditambah atau dihapus setelah dikunci.'),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, false),
-                                      child: const Text('Batal')),
-                                  FilledButton(
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text('Setujui dan kunci'))
-                                ]));
-                    if (confirmed == true) {
-                      await run(() => model.repository.approve(period.text));
-                    }
-                  },
-            child: const Text('Setujui dan kunci')),
-      if (role == Role.guruWali)
-        OutlinedButton(
-            onPressed: busy.value
-                ? null
-                : () => run(() => model.repository.verify(period.text)),
-            child: const Text('Verifikasi sebagai Guru Wali')),
-      if (busy.value) const LinearProgressIndicator(),
-      Semantics(liveRegion: true, child: Text(message.value)),
-    ]);
+    Future<void> share(bool pdf) => run(() async {
+          final files = await model.exports.report(period.value);
+          await Share.shareXFiles(
+              [XFile(pdf ? files.pdf.path : files.csv.path)],
+              text: 'Laporan KasKelasKu ${period.value}',
+              sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
+        });
+
+    final data = snapshot.data;
+    final target = data?['target']! as int? ?? 0;
+    final paid = data?['paid']! as int? ?? 0;
+    final progress = target == 0 ? 0.0 : (paid / target).clamp(0.0, 1.0);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+      children: [
+        Text('Laporan', style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                      tooltip: 'Bulan sebelumnya',
+                      onPressed: () => period.value = periodOf(DateTime(
+                          int.parse(period.value.substring(0, 4)),
+                          int.parse(period.value.substring(5, 7)) - 1,
+                          1)),
+                      icon: const Icon(Icons.chevron_left)),
+                  Text(monthLabel(period.value),
+                      style: theme.textTheme.titleMedium),
+                  IconButton(
+                      tooltip: 'Bulan berikutnya',
+                      onPressed: () => period.value = periodOf(DateTime(
+                          int.parse(period.value.substring(0, 4)),
+                          int.parse(period.value.substring(5, 7)) + 1,
+                          1)),
+                      icon: const Icon(Icons.chevron_right)),
+                ]),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (data == null)
+          const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()))
+        else ...[
+          Row(children: [
+            Expanded(
+                child: _StatCard(
+                    label: 'Masuk',
+                    value: rupiah(data['income']! as int),
+                    color: scheme.primary)),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _StatCard(
+                    label: 'Keluar',
+                    value: rupiah(data['expense']! as int),
+                    color: scheme.error)),
+          ]),
+          const SizedBox(height: 10),
+          _StatCard(
+              label: 'Saldo akhir ${shortMonthLabel(period.value)}',
+              value: rupiah(data['closing']! as int),
+              color: scheme.onSurface,
+              wide: true),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(
+                          child: Text('Target kas',
+                              style: theme.textTheme.titleMedium)),
+                      if (user?.role == Role.bendahara)
+                        TextButton(
+                            onPressed: () => showTargetSheet(
+                                context, ref, period.value, target),
+                            child: const Text('Atur')),
+                    ]),
+                    Text(
+                        target == 0
+                            ? 'Belum ditentukan'
+                            : '${rupiah(paid)} dari ${rupiah(target)}',
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: scheme.onSurfaceVariant)),
+                    if (target > 0) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 10,
+                            backgroundColor: scheme.surfaceContainerHighest),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                          paid >= target
+                              ? 'Lunas'
+                              : '${(progress * 100).round()}% terkumpul',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurfaceVariant)),
+                    ],
+                  ]),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+              key: const Key('share_pdf_btn'),
+              onPressed: busy.value ? null : () => share(true),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Bagikan PDF')),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+              key: const Key('share_csv_btn'),
+              onPressed: busy.value ? null : () => share(false),
+              icon: const Icon(Icons.table_chart_outlined),
+              label: const Text('Bagikan CSV')),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+              onPressed: busy.value ? null : () => _share(context, model),
+              icon: const Icon(Icons.cloud_download_outlined),
+              label: const Text('Cadangkan data')),
+          if (user?.role == Role.ketua) ...[
+            const SizedBox(height: 20),
+            const _SectionTitle('Persetujuan'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+                onPressed: busy.value
+                    ? null
+                    : () async {
+                        final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                                    title:
+                                        const Text('Setujui dan kunci bulan?'),
+                                    content: const Text(
+                                        'Transaksi bulan ini tidak dapat ditambah atau dihapus setelah dikunci.'),
+                                    actions: [
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: const Text('Batal')),
+                                      FilledButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: const Text('Setujui'))
+                                    ]));
+                        if (confirmed == true) {
+                          await run(
+                              () => model.repository.approve(period.value));
+                        }
+                      },
+                icon: const Icon(Icons.lock_outline),
+                label: const Text('Setujui dan kunci')),
+          ],
+          if (user?.role == Role.guruWali) ...[
+            const SizedBox(height: 20),
+            const _SectionTitle('Verifikasi'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+                onPressed: busy.value
+                    ? null
+                    : () => run(() => model.repository.verify(period.value)),
+                icon: const Icon(Icons.verified_outlined),
+                label: const Text('Verifikasi sebagai Guru Wali')),
+          ],
+        ],
+        if (busy.value) ...[
+          const SizedBox(height: 16),
+          const LinearProgressIndicator(),
+        ],
+      ],
+    );
+  }
+
+  // coverage:ignore-start
+  Future<void> _share(BuildContext context, TreasuryViewModel model) async {
+    try {
+      final file = await model.exports.backup();
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'Cadangan KasKelasKu',
+          sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
+      if (context.mounted) {
+        await showInfo(context, 'Cadangan siap dibagikan.');
+      }
+    } catch (error) {
+      if (context.mounted) await showError(context, error);
+    } // coverage:ignore-end
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard(
+      {required this.label,
+      required this.value,
+      required this.color,
+      this.wide = false});
+  final String label;
+  final String value;
+  final Color color;
+  final bool wide;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 6),
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(color: color, fontWeight: FontWeight.w800)),
+        ]),
+      ),
+    );
+  }
+}
+
+Future<void> showTargetSheet(
+    BuildContext context, WidgetRef ref, String period, int current) {
+  return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => TargetSheet(period: period, current: current));
+}
+
+class TargetSheet extends HookConsumerWidget {
+  const TargetSheet({super.key, required this.period, required this.current});
+  final String period;
+  final int current;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final amount =
+        useTextEditingController(text: current == 0 ? '' : '$current');
+    final busy = useState(false);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Target ${monthLabel(period)}',
+                style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('Target kas keseluruhan bulan ini.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('target_input'),
+              controller: amount,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                  labelText: 'Target rupiah', prefixText: 'Rp '),
+            ),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, children: [
+              for (final value in [10000, 20000, 50000, 100000, 200000])
+                ActionChip(
+                    label: Text(rupiah(value)),
+                    onPressed: () => amount.text = '$value'),
+            ]),
+            const SizedBox(height: 20),
+            FilledButton(
+                key: const Key('save_target_btn'),
+                onPressed: busy.value
+                    ? null
+                    : () async {
+                        busy.value = true;
+                        try {
+                          await ref
+                              .read(treasuryProvider)
+                              .repository
+                              .setTotalMonthlyTarget(
+                                  period, int.tryParse(amount.text) ?? -1);
+                          if (context.mounted) Navigator.pop(context);
+                        } catch (error) {
+                          if (context.mounted) await showError(context, error);
+                        } finally {
+                          busy.value = false;
+                        }
+                      },
+                child: Text(busy.value ? 'Menyimpan…' : 'Simpan target')),
+          ]),
+    );
   }
 }
 
@@ -813,326 +1462,175 @@ class MembersScreen extends HookConsumerWidget {
     final future = useMemoized(repo.members, [revision]);
     final snapshot = useFuture(future);
     final editable = ref.watch(sessionProvider)!.role == Role.bendahara;
-    return Column(children: [
-      if (editable)
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+        child: Row(children: [
+          Expanded(
+              child: Text('Anggota',
+                  style: Theme.of(context).textTheme.headlineMedium)),
+          if (editable)
+            FilledButton.icon(
+                key: const Key('add_member_btn'),
+                onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => const MemberSheet()),
+                icon: const Icon(Icons.person_add_outlined, size: 18),
+                label: const Text('Tambah')),
+        ]),
+      ),
+      if (snapshot.hasError)
         Padding(
-            padding: const EdgeInsets.all(16),
-            child: Wrap(spacing: 8, children: [
-              FilledButton.icon(
-                  onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => const AddMemberDialog()),
-                  icon: const Icon(Icons.person_add_outlined),
-                  label: const Text('Tambah anggota')),
-              // coverage:ignore-start
-              OutlinedButton.icon(
-                  onPressed: () => showDialog<void>(
-                      context: context, builder: (_) => const TargetDialog()),
-                  icon: const Icon(Icons.flag_outlined),
-                  label: const Text('Atur target kas')) // coverage:ignore-end
-            ])),
-      if (snapshot.hasError) const Text('Daftar anggota gagal dimuat.'),
-      Expanded(
-          child: ListView(children: [
-        for (final member in snapshot.data ?? <Member>[])
-          ListTile(
-            title: Text('${member.name}${member.active ? '' : ' (nonaktif)'}'),
-            subtitle: SelectableText('${member.role.label}\nID: ${member.id}'),
-            isThreeLine: true,
-            trailing: editable
-                ? PopupMenuButton<String>(
-                    tooltip: 'Ubah izin anggota',
-                    onSelected: (value) async {
-                      try {
-                        await repo.changeMember(
-                            member,
-                            value == 'active' ? member.role : Role.parse(value),
-                            value == 'active' ? !member.active : member.active);
-                      } catch (error) {
-                        if (context.mounted) await showError(context, error);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                          for (final role in Role.values)
-                            PopupMenuItem(
-                                value: role.name, child: Text(role.label)),
-                          PopupMenuItem(
-                              value: 'active',
-                              child: Text(
-                                  member.active ? 'Nonaktifkan' : 'Aktifkan')),
-                        ])
-                : null,
-          )
-      ])),
+            padding: const EdgeInsets.all(20),
+            child: Text('Daftar anggota gagal dimuat.',
+                style: TextStyle(color: scheme.error)))
+      else if (!snapshot.hasData)
+        const Expanded(child: Center(child: CircularProgressIndicator()))
+      else
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+            itemCount: snapshot.data!.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) {
+              final member = snapshot.data![i];
+              return Card(
+                child: ListTile(
+                  onTap: editable
+                      ? () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          showDragHandle: true,
+                          builder: (_) => MemberSheet(member: member))
+                      : null,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  leading: CircleAvatar(
+                      backgroundColor: scheme.primaryContainer,
+                      child: Text(
+                          member.name.trim().isEmpty
+                              ? '?'
+                              : member.name.trim()[0].toUpperCase(),
+                          style: TextStyle(
+                              color: scheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w700))),
+                  title: Text(member.name,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: member.active
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant)),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(20)),
+                        child: Text(member.role.label,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurfaceVariant)),
+                      ),
+                      if (!member.active) ...[
+                        const SizedBox(width: 6),
+                        Text('nonaktif',
+                            style: TextStyle(
+                                fontSize: 11, color: scheme.onSurfaceVariant)),
+                      ],
+                    ]),
+                  ),
+                  trailing: editable
+                      ? Icon(Icons.chevron_right,
+                          color: scheme.onSurfaceVariant)
+                      : null,
+                ),
+              );
+            },
+          ),
+        ),
     ]);
   }
 }
 
-// coverage:ignore-start
-class TargetDialog extends HookConsumerWidget {
-  const TargetDialog({super.key});
+class MemberSheet extends HookConsumerWidget {
+  const MemberSheet({super.key, this.member});
+  final Member? member;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final period = useTextEditingController(text: monthOf(DateTime.now()));
-    final amount = useTextEditingController(text: '10000');
-    final member = useState<String?>(null);
-    final members = useFuture(
-        useMemoized(() => ref.read(treasuryProvider).repository.members()));
-    return AlertDialog(
-        title: const Text('Target kas keseluruhan bulanan'),
-        content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-              controller: period,
-              decoration: const InputDecoration(labelText: 'Bulan YYYY-MM')),
-          DropdownButtonFormField<String>(
-              value: member.value,
-              decoration: const InputDecoration(labelText: 'Nama penyetor'),
-              items: (members.data ?? <Member>[])
-                  .where((m) => m.role == Role.siswa && m.active)
-                  .map(
-                      (m) => DropdownMenuItem(value: m.id, child: Text(m.name)))
-                  .toList(),
-              onChanged: (value) => member.value = value),
-          TextField(
-              controller: amount,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Target rupiah'))
-        ])),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal')),
-          FilledButton(
-              onPressed: () async {
-                try {
-                  final id = member.value;
-                  if (id == null) throw const AppError('Pilih nama penyetor.');
-                  await ref.read(treasuryProvider).repository.setMonthlyTarget(
-                      period.text, id, int.tryParse(amount.text) ?? -1);
-                  if (context.mounted) Navigator.pop(context);
-                } catch (error) {
-                  if (context.mounted) await showError(context, error);
-                }
-              },
-              child: const Text('Simpan'))
-        ]);
-  }
-}
-// coverage:ignore-end
-
-class AddMemberDialog extends HookConsumerWidget {
-  const AddMemberDialog({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final name = useTextEditingController();
-    final role = useState(Role.siswa);
+    final editing = member != null;
+    final name = useTextEditingController(text: member?.name ?? '');
+    final role = useState(member?.role ?? Role.siswa);
+    final active = useState(member?.active ?? true);
     final busy = useState(false);
-    return AlertDialog(
-        title: const Text('Tambah anggota'),
-        content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(editing ? 'Ubah anggota' : 'Tambah anggota',
+                style: theme.textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('member_name_input'),
               controller: name,
+              enabled: !editing,
+              textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'Nama'),
-              maxLength: 80),
-          DropdownButtonFormField<Role>(
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<Role>(
               value: role.value,
+              decoration: const InputDecoration(labelText: 'Peran'),
               items: Role.values
                   .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
                   .toList(),
               onChanged: (value) {
                 if (value != null) role.value = value;
-              }),
-        ])),
-        actions: [
-          TextButton(
-              onPressed: busy.value ? null : () => Navigator.pop(context),
-              child: const Text('Batal')),
-          FilledButton(
-              onPressed: busy.value
-                  ? null
-                  : () async {
-                      busy.value = true;
-                      try {
-                        await ref
-                            .read(treasuryProvider)
-                            .repository
-                            .addMember(name.text, role.value, '');
-                        if (context.mounted) Navigator.pop(context);
-                      } catch (error) {
-                        if (context.mounted) await showError(context, error);
-                      } finally {
-                        if (context.mounted) busy.value = false;
-                      }
-                    },
-              child: const Text('Simpan')),
-        ]);
-  }
-}
-
-class ChangePasswordDialog extends HookConsumerWidget {
-  const ChangePasswordDialog({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final old = useTextEditingController();
-    final next = useTextEditingController();
-    final busy = useState(false);
-    return AlertDialog(
-        title: const Text('Ganti kata sandi'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-              controller: old,
-              obscureText: true,
-              decoration:
-                  const InputDecoration(labelText: 'Kata sandi sekarang')),
-          TextField(
-              controller: next,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: 'Kata sandi baru minimal 12 karakter')),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: busy.value ? null : () => Navigator.pop(context),
-              child: const Text('Batal')),
-          FilledButton(
-              onPressed: busy.value
-                  ? null
-                  : () async {
-                      busy.value = true;
-                      try {
-                        await ref
-                            .read(treasuryProvider)
-                            .repository
-                            .changePassword(old.text, next.text);
-                        old.clear();
-                        next.clear();
-                        if (context.mounted) Navigator.pop(context);
-                      } catch (error) {
-                        if (context.mounted) await showError(context, error);
-                      } finally {
-                        if (context.mounted) busy.value = false;
-                      }
-                    },
-              child: const Text('Simpan'))
-        ]);
-  }
-}
-
-class ImportExportDialog extends HookConsumerWidget {
-  const ImportExportDialog({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final password = useTextEditingController();
-    final busy = useState(false);
-    final model = ref.watch(treasuryProvider);
-    final member = ref.watch(sessionProvider);
-    final automatic = useFuture(useMemoized(model.exports.automaticFiles));
-    final selectedAutomatic = useState<String?>(null);
-    Future<void> open(bool restore) async {
-      busy.value = true;
-      try {
-        final File file;
-        final auto = !restore && selectedAutomatic.value != null;
-        if (auto) {
-          file = File(selectedAutomatic.value!);
-        } else {
-          final result =
-              await FilePicker.platform.pickFiles(type: FileType.any);
-          if (result == null ||
-              result.files.single.path == null ||
-              !context.mounted) return;
-          file = File(result.files.single.path!);
-        }
-        if (restore) {
-          final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                      title: const Text('Pulihkan ke brankas kosong?'),
-                      content: const Text(
-                          'Hanya brankas baru tanpa transaksi atau anggota tambahan yang dapat dipulihkan. Akun dari cadangan tetap nonaktif; buat akun baru untuk memberi akses. Data lama tidak ditimpa.'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Batal')),
-                        FilledButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Pulihkan'))
-                      ]));
-          if (confirmed != true) return;
-          await model.exports.restore(file, password.text);
-        } else {
-          File? plain;
-          try {
-            plain = await model.exports.decryptReport(
-                file,
-                auto
-                    ? await model.repository.automaticReportPassword()
-                    : password.text);
-            await Share.shareXFiles([XFile(plain.path)],
-                text: 'Laporan KasKelasKu',
-                sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
-          } finally {
-            if (plain != null && await plain.parent.exists()) {
-              await plain.parent.delete(recursive: true);
-            }
-          }
-        }
-        password.clear();
-        if (context.mounted) Navigator.pop(context);
-      } catch (error) {
-        if (context.mounted) await showError(context, error);
-      } finally {
-        if (context.mounted) busy.value = false;
-      }
-    }
-
-    return AlertDialog(
-        title: const Text('Berkas terenkripsi'),
-        content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text(
-              'Laporan yang dibagikan setelah dibuka berupa PDF/CSV tanpa enkripsi. Penerima dan aplikasi tujuan dapat menyimpan salinannya.'),
-          TextField(
-              controller: password,
-              obscureText: true,
-              decoration:
-                  const InputDecoration(labelText: 'Kata sandi berkas')),
-          if ((automatic.data ?? []).isNotEmpty)
-            DropdownButtonFormField<String>(
-                value: selectedAutomatic.value,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                    labelText:
-                        'Laporan otomatis lokal (tanpa kata sandi ekspor)'),
-                items: [
-                  const DropdownMenuItem<String>(
-                      value: null, child: Text('Pilih berkas manual')),
-                  for (final file in automatic.data!)
-                    DropdownMenuItem(
-                        value: file.path,
-                        child: Text(file.uri.pathSegments.last,
-                            overflow: TextOverflow.ellipsis))
-                ],
-                onChanged: busy.value
+              },
+            ),
+            if (editing) ...[
+              const SizedBox(height: 4),
+              SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Aktif'),
+                  value: active.value,
+                  onChanged: (value) => active.value = value),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+                key: const Key('save_member_btn'),
+                onPressed: busy.value
                     ? null
-                    : (value) => selectedAutomatic.value = value),
-          const SizedBox(height: 16),
-          FilledButton(
-              onPressed: busy.value ? null : () => open(false),
-              child: const Text('Pilih dan buka laporan')),
-          if (member?.role == Role.bendahara)
-            OutlinedButton(
-                onPressed: busy.value ? null : () => open(true),
-                child: const Text('Pilih cadangan untuk pemulihan')),
-          if (busy.value) const LinearProgressIndicator(),
-        ])),
-        actions: [
-          TextButton(
-              onPressed: busy.value ? null : () => Navigator.pop(context),
-              child: const Text('Tutup'))
-        ]);
+                    : () async {
+                        busy.value = true;
+                        try {
+                          final repo = ref.read(treasuryProvider).repository;
+                          if (editing) {
+                            await repo.changeMember(
+                                member!, role.value, active.value);
+                          } else {
+                            await repo.addMember(name.text, role.value);
+                          }
+                          if (context.mounted) Navigator.pop(context);
+                        } catch (error) {
+                          if (context.mounted) await showError(context, error);
+                        } finally {
+                          busy.value = false;
+                        }
+                      },
+                child: Text(busy.value ? 'Menyimpan…' : 'Simpan')),
+          ]),
+    );
   }
 }
 
@@ -1140,76 +1638,394 @@ class SettingsScreen extends HookConsumerWidget {
   const SettingsScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dark = ref.watch(darkModeProvider);
-    final password = useTextEditingController();
-    final busy = useState(false);
+    final model = ref.watch(treasuryProvider);
     final user = ref.watch(sessionProvider)!;
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      SwitchListTile(
-          title: const Text('Mode gelap'),
-          value: dark,
-          onChanged: (value) async {
-            ref.read(darkModeProvider.state).state = value;
-            try {
-              await Vault.storage.write(key: 'setting:dark', value: '$value');
-            } catch (error) {
-              if (context.mounted) await showError(context, error);
-            }
-          }),
-      const ListTile(
-          leading: Icon(Icons.lock_clock_outlined),
-          title: Text('Kunci otomatis'),
-          subtitle: Text(
-              'Setelah 3 menit tidak aktif atau aplikasi masuk latar belakang.')),
-      SelectableText('Akun: ${user.name}\nID: ${user.id}'),
-      OutlinedButton(
-          onPressed: () => showDialog<void>(
-              context: context, builder: (_) => const ChangePasswordDialog()),
-          child: const Text('Ganti kata sandi')),
-      const SizedBox(height: 16),
-      OutlinedButton.icon(
-          onPressed: () => showDialog<void>(
-              context: context, builder: (_) => const ImportExportDialog()),
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Buka laporan / pulihkan cadangan')),
-      if (user.role == Role.bendahara) ...[
+    final dark = ref.watch(darkModeProvider);
+    final busy = useState(false);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    Future<void> restore() async {
+      try {
+        final result = await FilePicker.platform.pickFiles(type: FileType.any);
+        final path = result?.files.single.path;
+        if (path == null || !context.mounted) return;
+        final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+                    title: const Text('Pulihkan cadangan?'),
+                    content: const Text(
+                        'Pemulihan hanya untuk data kosong dan akan mengganti anggota, transaksi, laporan, serta target saat ini.'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Batal')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Pulihkan'))
+                    ]));
+        if (confirmed != true) return;
+        busy.value = true;
+        final member = await model.exports.restore(File(path));
+        ref.read(sessionProvider.state).state = member;
+        if (context.mounted) await showInfo(context, 'Cadangan dipulihkan.');
+      } catch (error) {
+        if (context.mounted) await showError(context, error);
+      } finally {
+        busy.value = false;
+      }
+    }
+
+    Future<void> backup() async {
+      try {
+        busy.value = true;
+        final file = await model.exports.backup();
+        await Share.shareXFiles([XFile(file.path)],
+            text: 'Cadangan KasKelasKu',
+            sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
+        if (context.mounted) {
+          await showInfo(context, 'Cadangan siap dibagikan.');
+        }
+      } catch (error) {
+        if (context.mounted) await showError(context, error);
+      } finally {
+        busy.value = false;
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+      children: [
+        Text('Setelan', style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 16),
+        const _SectionTitle('Pengguna'),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            leading: CircleAvatar(
+                backgroundColor: scheme.primaryContainer,
+                child: Text(
+                    user.name.trim().isEmpty
+                        ? '?'
+                        : user.name.trim()[0].toUpperCase(),
+                    style: TextStyle(
+                        color: scheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w700))),
+            title: Text(user.name,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(user.role.label),
+            trailing: OutlinedButton(
+                onPressed: () => _showUserSheet(context, ref),
+                child: const Text('Ganti')),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const _SectionTitle('Tampilan'),
+        const SizedBox(height: 8),
+        Card(
+          child: SwitchListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            secondary: Icon(dark ? Icons.dark_mode : Icons.light_mode,
+                color: scheme.primary),
+            title: const Text('Mode gelap'),
+            value: dark,
+            onChanged: (value) =>
+                ref.read(darkModeProvider.state).state = value,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const _SectionTitle('Data'),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(children: [
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              leading:
+                  Icon(Icons.cloud_download_outlined, color: scheme.primary),
+              title: const Text('Cadangkan data'),
+              subtitle: const Text('Berkas JSON berisi semua catatan'),
+              onTap: busy.value ? null : backup,
+            ),
+            const Divider(indent: 56, endIndent: 16),
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              leading: Icon(Icons.restore_outlined, color: scheme.primary),
+              title: const Text('Pulihkan cadangan'),
+              subtitle: const Text('Hanya untuk data yang masih kosong'),
+              onTap: busy.value ? null : restore,
+            ),
+          ]),
+        ),
+        if (busy.value) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
+        const SizedBox(height: 20),
+        Card(
+          color: scheme.surfaceContainerHighest.withOpacity(0.5),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.info_outline,
+                  size: 18, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text(
+                      'Data disimpan di perangkat ini tanpa enkripsi. Siapa pun yang membuka aplikasi dapat melihat dan mengubah data.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant))),
+            ]),
+          ),
+        ),
         const SizedBox(height: 24),
-        Text('Cadangan AES-256-GCM',
-            style: Theme.of(context).textTheme.titleLarge),
-        const Text(
-            'Simpan kata sandi cadangan terpisah. Tanpa kata sandi, cadangan tidak dapat dibuka.'),
-        TextField(
-            controller: password,
-            obscureText: true,
-            decoration: const InputDecoration(
-                labelText: 'Kata sandi cadangan minimal 12 karakter')),
-        FilledButton(
-            onPressed: busy.value
-                ? null
-                : () async {
-                    busy.value = true;
-                    try {
-                      final file = await ref
-                          .read(treasuryProvider)
-                          .exports
-                          .backup(password.text);
-                      password.clear();
-                      await Share.shareXFiles([XFile(file.path)],
-                          text: 'Cadangan KasKelasKu terenkripsi',
-                          sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: SelectableText(
-                                'Cadangan tersimpan: ${file.path}')));
-                      }
-                    } catch (error) {
-                      if (context.mounted) await showError(context, error);
-                    } finally {
-                      if (context.mounted) busy.value = false;
-                    }
-                  },
-            child: Text(busy.value ? 'Mengenkripsi…' : 'Buat cadangan lokal')),
+        Center(
+            child: Text('KasKelasKu $appVersion',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant))),
       ],
-    ]);
+    );
+  }
+}
+
+class TransactionEntry extends HookConsumerWidget {
+  const TransactionEntry({super.key, this.initialType = 'IN'});
+  final String initialType;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final amount = useTextEditingController();
+    final category = useTextEditingController();
+    final description = useTextEditingController();
+    final date = useState(DateTime.now());
+    final type = useState(initialType);
+    final contributor = useState<String?>(null);
+    final busy = useState(false);
+    final membersFuture =
+        useMemoized(() => ref.read(treasuryProvider).repository.members());
+    final members = useFuture(membersFuture);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    const categories = ['Kas', 'Iuran', 'Kebersihan', 'Kegiatan', 'Lainnya'];
+
+    Future<void> submit() async {
+      final text = category.text.trim();
+      if (text.isEmpty) {
+        await showError(context, const AppError('Isi kategori.'));
+        return;
+      }
+      busy.value = true;
+      final entry = CashTransaction(
+          amount: int.tryParse(amount.text) ?? 0,
+          type: type.value,
+          category: text,
+          contributorId: type.value == 'IN' ? contributor.value : null,
+          date: isoDate(date.value),
+          description:
+              description.text.trim().isEmpty ? text : description.text.trim());
+      try {
+        final repo = ref.read(treasuryProvider).repository;
+        try {
+          await repo.addTransaction(entry);
+        } on DuplicateTransaction {
+          if (!context.mounted) return;
+          final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                      title: const Text('Transaksi serupa ditemukan'),
+                      content: const Text(
+                          'Pastikan pembayaran ini berbeda sebelum menyimpan.'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Batal')),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Tetap simpan'))
+                      ]));
+          if (confirmed != true) return;
+          await repo.addTransaction(entry, confirmDuplicate: true);
+        }
+        if (context.mounted) Navigator.pop(context);
+      } catch (error) {
+        if (context.mounted) await showError(context, error);
+      } finally {
+        busy.value = false;
+      }
+    }
+
+    return Material(
+      color: scheme.surface,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: SafeArea(
+          top: false,
+          child: Column(children: [
+            const SizedBox(height: 10),
+            Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 12, 0),
+              child: Row(children: [
+                Expanded(
+                    child: Text('Catat transaksi',
+                        style: theme.textTheme.titleLarge)),
+                IconButton(
+                    tooltip: 'Tutup',
+                    onPressed: busy.value ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close)),
+              ]),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: const [
+                          ButtonSegment(
+                              value: 'IN',
+                              label: Text('Masuk'),
+                              icon: Icon(Icons.south_west, size: 18)),
+                          ButtonSegment(
+                              value: 'OUT',
+                              label: Text('Keluar'),
+                              icon: Icon(Icons.north_east, size: 18)),
+                        ],
+                        selected: {type.value},
+                        onSelectionChanged: (value) {
+                          type.value = value.first;
+                          if (type.value == 'OUT') contributor.value = null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest
+                                .withOpacity(0.55),
+                            borderRadius: BorderRadius.circular(18)),
+                        child: TextField(
+                          key: const Key('amount_input'),
+                          controller: amount,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          style: theme.textTheme.headlineMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                          decoration: const InputDecoration(
+                              labelText: 'Nominal',
+                              prefixText: 'Rp ',
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final value in [5000, 10000, 20000, 50000])
+                          ActionChip(
+                              label: Text('+${rupiah(value)}'),
+                              onPressed: () {
+                                final current = int.tryParse(amount.text) ?? 0;
+                                amount.text = '${current + value}';
+                              }),
+                      ]),
+                      if (type.value == 'IN') ...[
+                        const SizedBox(height: 20),
+                        Text('Penyetor', style: theme.textTheme.labelLarge),
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          ChoiceChip(
+                              label: const Text('Umum'),
+                              selected: contributor.value == null,
+                              onSelected: (_) => contributor.value = null),
+                          for (final member in (members.data ?? <Member>[])
+                              .where((m) => m.role == Role.siswa && m.active))
+                            ChoiceChip(
+                                key: Key('contributor_${member.id}'),
+                                label: Text(member.name),
+                                selected: contributor.value == member.id,
+                                onSelected: (_) => contributor.value =
+                                    contributor.value == member.id
+                                        ? null
+                                        : member.id),
+                        ]),
+                      ],
+                      const SizedBox(height: 20),
+                      TextField(
+                        key: const Key('category_input'),
+                        controller: category,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                            labelText: 'Kategori', hintText: 'Contoh: Kas'),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final value in categories)
+                          ActionChip(
+                              label: Text(value),
+                              onPressed: () => category.text = value),
+                      ]),
+                      const SizedBox(height: 20),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                              context: context,
+                              initialDate: date.value,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100));
+                          if (picked != null) date.value = picked;
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                              labelText: 'Tanggal',
+                              suffixIcon: Icon(Icons.calendar_today_outlined,
+                                  size: 18)),
+                          child: Text(dateLabel(isoDate(date.value))),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        key: const Key('description_input'),
+                        controller: description,
+                        textCapitalization: TextCapitalization.sentences,
+                        maxLines: 2,
+                        minLines: 1,
+                        decoration: const InputDecoration(
+                            labelText: 'Keterangan (opsional)',
+                            hintText: 'Contoh: Iuran pekan pertama'),
+                      ),
+                    ]),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: FilledButton(
+                  key: const Key('submit_tx_btn'),
+                  onPressed: busy.value ? null : submit,
+                  child: Text(busy.value ? 'Menyimpan…' : 'Simpan transaksi')),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }

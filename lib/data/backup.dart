@@ -8,27 +8,15 @@ class Backup {
     }
     for (final table in columns.keys) {
       final raw = source[table];
-      if (raw == null &&
-          (table == 'monthly_targets' || table == 'monthly_total_targets')) {
-        tables[table] = [];
-        continue;
-      }
       if (raw is! List || raw.length > 100000) {
         throw const AppError('Isi cadangan tidak valid atau terlalu besar.');
       }
       tables[table] = raw.map((value) {
         final keys = value is Map ? value.keys.toSet() : <Object?>{};
-        final required = table == 'transactions'
-            ? columns[table]!.difference({'contributor_id'})
-            : (table == 'monthly_total_targets'
-                ? columns[table]!.difference({'amount'})
-                : columns[table]!);
-        if (value is! Map || !keys.containsAll(required)) {
+        if (value is! Map || !keys.containsAll(columns[table]!)) {
           throw const AppError('Kolom cadangan tidak valid.');
         }
-        final row = Map<String, Object?>.from(value);
-        if (table == 'transactions') row['contributor_id'] ??= null;
-        return row;
+        return Map<String, Object?>.from(value);
       }).toList();
     }
     final ids = <String>{};
@@ -82,6 +70,16 @@ class Backup {
         }
       }
     }
+    for (final row in tables['monthly_total_targets']!) {
+      if (row['period'] is! String || row['amount'] is! int) {
+        throw const AppError('Target cadangan tidak valid.');
+      }
+      validateMonth(row['period']! as String);
+      if ((row['amount']! as int) < 0 ||
+          (row['amount']! as int) > 1000000000000) {
+        throw const AppError('Target cadangan tidak valid.');
+      }
+    }
     for (final row in tables['audit_log']!) {
       if (row['id'] is! int ||
           !ids.contains(row['actor']) ||
@@ -101,6 +99,7 @@ class Backup {
       'amount',
       'type',
       'category',
+      'contributor_id',
       'tx_date',
       'description',
       'created_by',
@@ -115,7 +114,6 @@ class Backup {
       'verified_by',
       'verified_at'
     },
-    'monthly_targets': {'period', 'member_id', 'amount'},
     'monthly_total_targets': {'period', 'amount'},
     'audit_log': {'id', 'actor', 'action', 'target', 'at'},
   };

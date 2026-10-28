@@ -16,13 +16,6 @@ CREATE TABLE monthly_reports (
   CHECK(verified_by IS NULL OR approved_by IS NOT NULL)
 );
 -- @statement
-CREATE TABLE monthly_targets (
-  period TEXT NOT NULL CHECK(length(period)=7 AND substr(period,6,2) BETWEEN '01' AND '12'),
-  member_id TEXT NOT NULL REFERENCES users(id),
-  amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND 1000000000000),
-  PRIMARY KEY(period, member_id)
-);
--- @statement
 CREATE TABLE monthly_total_targets (
   period TEXT PRIMARY KEY CHECK(length(period)=7 AND substr(period,6,2) BETWEEN '01' AND '12'),
   amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND 1000000000000)

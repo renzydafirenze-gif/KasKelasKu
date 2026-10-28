@@ -33,6 +33,7 @@ class CashTransaction {
       required this.type,
       required this.category,
       this.contributorId,
+      this.contributorName,
       required this.date,
       required this.description});
   final int? id;
@@ -40,9 +41,11 @@ class CashTransaction {
   final String type;
   final String category;
   final String? contributorId;
+  final String? contributorName;
   final String date;
   final String description;
-  int get signedAmount => type == 'IN' ? amount : -amount;
+  bool get isIncome => type == 'IN';
+  int get signedAmount => isIncome ? amount : -amount;
   void validate() {
     if (amount <= 0 ||
         amount > 1000000000000 ||
@@ -71,8 +74,27 @@ class CashTransaction {
       type: row['type']! as String,
       category: row['category']! as String,
       contributorId: row['contributor_id'] as String?,
+      contributorName: row['contributor_name'] as String?,
       date: row['tx_date']! as String,
       description: row['description']! as String);
+}
+
+class Overview {
+  const Overview(
+      {required this.balance,
+      required this.income,
+      required this.expense,
+      required this.target,
+      required this.paid,
+      required this.recent,
+      required this.trends});
+  final int balance;
+  final int income;
+  final int expense;
+  final int target;
+  final int paid;
+  final List<CashTransaction> recent;
+  final List<Map<String, Object?>> trends;
 }
 
 bool validDate(String value) {
@@ -98,6 +120,8 @@ class AppError implements Exception {
 }
 
 class DuplicateTransaction extends AppError {
+  // coverage:ignore-start
   const DuplicateTransaction()
       : super('Transaksi serupa sudah ada. Tetap simpan?');
+  // coverage:ignore-end
 }

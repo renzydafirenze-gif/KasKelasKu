@@ -4,44 +4,38 @@ Status: internal implementation review only, not an independent audit.
 
 ## Controls
 
-- SQLCipher activation/integrity verified when opening native database.
-- Random 256-bit database key, credential-wrapped per account in secure storage.
-- PBKDF2-HMAC-SHA256 600,000 iterations, independent random 32-byte salts.
-- AES-256-GCM with authenticated context, 12-byte nonces, 16-byte tags.
-- Read authorization and transaction-scoped write authorization.
+- Read authorization and transaction-scoped write authorization by role
+  (Bendahara writes, Ketua approves/locks, Guru Wali verifies).
 - Chairperson locks enforced by SQL triggers; immutable entries, audited deletes.
-- Backup restore only into empty initialized vault, validated shapes and bounded
-  inputs, one SQLite transaction including trigger removal/recreation.
-- Imported identities disabled. Credentials never carried in backups.
-- Five failed password attempts cause 30-second local cooldown.
-- Idle/background lock; live identity/role check every two seconds.
-- Explicit plaintext-sharing warning; generated plaintext cleaned after sharing.
-- Android cloud backup disabled; no app network permission in release manifest.
+- Backup restore only into empty data, validated shapes and bounded inputs, one
+  SQLite transaction including trigger removal/recreation.
+- Untrusted backup boundary rejected before touching the live database.
+- CSV cells protected against spreadsheet formula injection.
+- No network permission in release manifest; Android cloud backup disabled.
 
-## Known limits / mandatory release work
+## Deliberate trade-off: no encryption
 
-- Local administrator/root/jailbreak can read process keys and alter binaries.
-- Biometric re-entry keeps last authenticated key in Dart process memory.
-- Dart strings and garbage collection cannot guarantee key zeroization.
-- Account role is repository-authorized, not an SQLCipher per-user grant.
-- Biometric OS owner is not proof of a particular class member's identity.
-- Automatic reports use database key as password input to a separate salted KDF;
-  they are device-local and must be re-exported with user password for portability.
-- File picker/share extensions can pause app; lock may abort current export.
-- Crash during plaintext sharing may leave temporary plaintext until app cache
-  cleanup; OS sandbox and device encryption remain required.
-- Pending setup is resumed after credential authentication; crash between writing
-  credential wrapper and pending marker still needs explicit support recovery.
-- Legacy SQLCipher 4.5.4 and old Flutter/plugin stack need native vulnerability,
-  16 KB page compatibility and 2026 app-store policy review.
-- Export multi-file generation is atomic per file, not across PDF/CSV pair.
-- Local audit is not tamper-evident to an attacker holding database key.
+KasKelasKu 1.2.0 stores everything unencrypted on purpose: SQLite plaintext,
+JSON backups and plain PDF/CSV reports. There are no accounts, passwords or
+biometrics; anyone who opens the app can read and change data. Role checks are
+still enforced in the repository and by SQL triggers, but they are **not** a
+security boundary against someone holding the device or the database file — the
+UI lets a user switch role without proof of identity.
+
+Do not store sensitive or disputed financial records here. Keep the device
+locked and do not share backup/report files over untrusted channels.
+
+## Known limits
+
+- Legacy encrypted database from <=1.1.1 is quarantined as `.legacy`; its data
+  is not migrated and stays encrypted/unusable.
+- Local audit is not tamper-evident; anyone with the database file can rewrite it.
+- Export generation is atomic per file, not across the PDF/CSV pair.
+- Crash during sharing may leave temporary plaintext in app cache.
 
 ## Required independent evidence
 
-Test real Android/iOS SQLCipher headers, wrong-key rejection, integrity failure,
-credential/backup tampering, role matrix, revoked/deactivated sessions, lock races,
-disk-full rollback, process termination mid-write/restore, Unicode PDF overflow,
-10,000-row scrolling, TalkBack/VoiceOver, 200% text, contrast, landscape and tablets.
-Do not label release production-ready until CI 100% coverage gate and these
-reviews pass. Host SQLite business tests are not encryption tests.
+Test real Android/iOS devices for role matrix, report/backup restore, disk-full
+rollback, process termination mid-write/restore, Unicode PDF overflow,
+10,000-row scrolling, TalkBack/VoiceOver, 200% text, contrast, landscape and
+tablets. Do not label release production-ready until CI gates and these reviews pass.

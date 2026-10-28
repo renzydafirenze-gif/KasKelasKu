@@ -8,11 +8,26 @@ void main() {
         'users': <Object?>[],
         'transactions': <Object?>[],
         'monthly_reports': <Object?>[],
-        'audit_log': <Object?>[],
-        'monthly_targets': <Object?>[],
-        'monthly_total_targets': <Object?>[]
+        'monthly_total_targets': <Object?>[],
+        'audit_log': <Object?>[]
       };
-  test('Backup validates table shapes and schema', () {
+  Map<String, Object?> user([String id = 'one']) =>
+      {'id': id, 'name': 'Siswa', 'role': 'siswa', 'active': 1};
+  Map<String, Object?> tx([String actor = 'one']) => {
+        'id': 1,
+        'amount': 5000,
+        'type': 'IN',
+        'category': 'Kas',
+        'contributor_id': null,
+        'tx_date': '2026-10-15',
+        'description': 'Iuran',
+        'created_by': actor,
+        'created_at': '2026-10-15T00:00:00Z',
+        'fingerprint': 'hash',
+        'submission_id': 'sub'
+      };
+
+  test('Backup validates table shapes and required columns', () {
     expect(Backup(empty()).tables['users'], isEmpty);
     for (final source in [
       <String, dynamic>{},
@@ -20,42 +35,67 @@ void main() {
       {...empty(), 'users': 'bad'},
       {
         ...empty(),
-        'users': [
-          {'id': 'incomplete'}
-        ]
+        'users': [1]
       },
       {
         ...empty(),
-        'users': [1]
-      }
+        'transactions': [tx()..remove('amount')]
+      },
+      {
+        ...empty(),
+        'monthly_total_targets': [
+          {'period': '2026-10'}
+        ]
+      },
     ]) {
       expect(() => Backup(source), throwsA(isA<AppError>()));
     }
   });
+
   test('Backup rejects duplicate identities, unknown roles and invalid periods',
       () {
-    final user = {'id': 'one', 'name': 'Siswa', 'role': 'siswa', 'active': 1};
+    for (final broken in [
+      [user(), user()],
+      [user()..['role'] = 'tidakAda'],
+      [user()..['name'] = '  '],
+      [user()..['active'] = 3],
+      [user()..['id'] = ''],
+    ]) {
+      expect(() => Backup({...empty(), 'users': broken}),
+          throwsA(isA<AppError>()));
+    }
     expect(
         () => Backup({
               ...empty(),
-              'users': [user, user]
-            }),
-        throwsA(isA<AppError>()));
-    expect(
-        () => Backup({
-              ...empty(),
-              'users': [
-                {...user, 'role': 'admin'}
+              'users': [user()],
+              'monthly_reports': [
+                {'period': '2026-13'}
               ]
             }),
         throwsA(isA<AppError>()));
     expect(
         () => Backup({
               ...empty(),
+              'users': [user()],
               'monthly_reports': [
                 {
-                  'period': '2026-13',
+                  'period': '2026-10',
                   'approved_by': null,
+                  'approved_at': null,
+                  'verified_by': 'one',
+                  'verified_at': 'now'
+                }
+              ]
+            }),
+        throwsA(isA<AppError>()));
+    expect(
+        () => Backup({
+              ...empty(),
+              'users': [user()],
+              'monthly_reports': [
+                {
+                  'period': '2026-10',
+                  'approved_by': 'one',
                   'approved_at': null,
                   'verified_by': null,
                   'verified_at': null
@@ -63,11 +103,66 @@ void main() {
               ]
             }),
         throwsA(isA<AppError>()));
-  });
-  test('Backup accepts legacy total target rows without amount', () {
     expect(
-        Backup({...empty(), 'monthly_total_targets': [
-          {'period': '2026-10'}
-        ]}).tables['monthly_total_targets'], hasLength(1));
+        () => Backup({
+              ...empty(),
+              'users': [user()],
+              'monthly_total_targets': [
+                {'period': '2026-10', 'amount': -1}
+              ]
+            }),
+        throwsA(isA<AppError>()));
+  });
+
+  test('Backup rejects invalid transactions, approvals and audit rows', () {
+    for (final broken in [
+      {
+        ...empty(),
+        'users': [user()],
+        'transactions': [tx('missing')]
+      },
+      {
+        ...empty(),
+        'users': [user()],
+        'transactions': [tx()..['amount'] = 0]
+      },
+      {
+        ...empty(),
+        'users': [user()],
+        'transactions': [tx()..['id'] = 'x']
+      },
+      {
+        ...empty(),
+        'users': [user()],
+        'transactions': [tx()..['submission_id'] = '']
+      },
+      {
+        ...empty(),
+        'users': [user()],
+        'transactions': [tx()..['created_at'] = 'bad']
+      },
+      {
+        ...empty(),
+        'users': [user()],
+        'audit_log': [
+          {
+            'id': 1,
+            'actor': 'missing',
+            'action': 'x',
+            'target': 'y',
+            'at': 'bad'
+          }
+        ]
+      },
+    ]) {
+      expect(() => Backup(broken), throwsA(isA<AppError>()));
+    }
+    expect(
+        Backup({
+          ...empty(),
+          'users': [user()],
+          'transactions': [tx()]
+        }).tables['transactions'],
+        hasLength(1));
   });
 }
