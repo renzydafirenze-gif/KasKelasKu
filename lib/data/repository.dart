@@ -35,6 +35,10 @@ class TreasuryRepository {
     }
     await _quarantineLegacy(path);
     return _db = await openDatabase(path, version: 1, onConfigure: (db) async {
+      // busy_timeout dan journal_mode mengembalikan baris, jadi pakai rawQuery
+      // agar tidak error di Android execSQL; foreign_keys tidak.
+      await db.rawQuery('PRAGMA busy_timeout=5000');
+      await db.rawQuery('PRAGMA journal_mode=WAL');
       await db.execute('PRAGMA foreign_keys=ON');
     }, onCreate: (db, _) async {
       final schema = await rootBundle.loadString('lib/data/schema.sql');

@@ -30,6 +30,7 @@ class FakeRepository extends TreasuryRepository {
   bool duplicate = false;
   bool failDelete = false;
   bool closed = false;
+  Duration writeDelay = Duration.zero;
   int openCalls = 0;
   final calls = <String>[];
   final historyCalls = <(String, String?, int)>[];
@@ -170,6 +171,7 @@ class FakeRepository extends TreasuryRepository {
   Future<void> addTransaction(CashTransaction entry,
       {bool confirmDuplicate = false}) async {
     entry.validate();
+    await Future<void>.delayed(writeDelay);
     if (duplicate && !confirmDuplicate) throw const DuplicateTransaction();
     record('transaction:${entry.type}:${entry.amount}:${entry.category}:'
         '${entry.description}:${entry.contributorId}:$confirmDuplicate');

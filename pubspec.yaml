@@ -1,7 +1,7 @@
 name: kaskelasku
 description: Aplikasi kas kelas offline untuk bendahara, ketua dan guru wali.
 publish_to: "none"
-version: 1.2.1+2
+version: 1.2.2+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

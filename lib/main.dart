@@ -10,7 +10,7 @@ import 'data/repository.dart';
 import 'models.dart';
 import 'view_model.dart';
 
-const String appVersion = '1.2.1';
+const String appVersion = '1.2.2';
 
 // coverage:ignore-start
 void main() {
@@ -1958,6 +1958,7 @@ class TransactionEntry extends HookConsumerWidget {
     final date = useState(DateTime.now());
     final type = useState(initialType);
     final contributor = useState<String?>(initialContributor);
+    final saving = useRef(false);
     final busy = useState(false);
     final membersFuture =
         useMemoized(() => ref.read(treasuryProvider).repository.members());
@@ -1967,47 +1968,54 @@ class TransactionEntry extends HookConsumerWidget {
     const categories = ['Kas', 'Iuran', 'Kebersihan', 'Kegiatan', 'Lainnya'];
 
     Future<void> submit() async {
-      final text = category.text.trim();
-      if (text.isEmpty) {
-        await showError(context, const AppError('Isi kategori.'));
-        return;
-      }
-      busy.value = true;
-      final entry = CashTransaction(
-          amount: int.tryParse(amount.text) ?? 0,
-          type: type.value,
-          category: text,
-          contributorId: type.value == 'IN' ? contributor.value : null,
-          date: isoDate(date.value),
-          description:
-              description.text.trim().isEmpty ? text : description.text.trim());
+      // Guard sinkron: tap kedua tidak menunggu rebuild tombol.
+      if (saving.value) return;
+      saving.value = true;
       try {
-        final repo = ref.read(treasuryProvider).repository;
-        try {
-          await repo.addTransaction(entry);
-        } on DuplicateTransaction {
-          if (!context.mounted) return;
-          final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                      title: const Text('Transaksi serupa ditemukan'),
-                      content: const Text(
-                          'Pastikan pembayaran ini berbeda sebelum menyimpan.'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Batal')),
-                        FilledButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Tetap simpan'))
-                      ]));
-          if (confirmed != true) return;
-          await repo.addTransaction(entry, confirmDuplicate: true);
+        final text = category.text.trim();
+        if (text.isEmpty) {
+          await showError(context, const AppError('Isi kategori.'));
+          return;
         }
-        if (context.mounted) Navigator.pop(context);
-      } catch (error) {
-        if (context.mounted) await showError(context, error);
+        busy.value = true;
+        final entry = CashTransaction(
+            amount: int.tryParse(amount.text) ?? 0,
+            type: type.value,
+            category: text,
+            contributorId: type.value == 'IN' ? contributor.value : null,
+            date: isoDate(date.value),
+            description: description.text.trim().isEmpty
+                ? text
+                : description.text.trim());
+        try {
+          final repo = ref.read(treasuryProvider).repository;
+          try {
+            await repo.addTransaction(entry);
+          } on DuplicateTransaction {
+            if (!context.mounted) return;
+            final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                        title: const Text('Transaksi serupa ditemukan'),
+                        content: const Text(
+                            'Pastikan pembayaran ini berbeda sebelum menyimpan.'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Batal')),
+                          FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Tetap simpan'))
+                        ]));
+            if (confirmed != true) return;
+            await repo.addTransaction(entry, confirmDuplicate: true);
+          }
+          if (context.mounted) Navigator.pop(context);
+        } catch (error) {
+          if (context.mounted) await showError(context, error);
+        }
       } finally {
+        saving.value = false;
         busy.value = false;
       }
     }

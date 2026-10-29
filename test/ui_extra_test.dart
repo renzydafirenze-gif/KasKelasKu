@@ -170,6 +170,32 @@ void main() {
     expect(repo.calls, ['students:Adi|Budi|Citra']);
   });
 
+  testWidgets('Double tap on Simpan only stores one transaction',
+      (tester) async {
+    // Simpan lambat supaya tap kedua mendarat saat penulisan masih berjalan.
+    final repo = FakeRepository()
+      ..writeDelay = const Duration(milliseconds: 200);
+    final model = TreasuryViewModel(repo);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(model.dispose);
+    });
+    tallView(tester);
+    await tester.pumpWidget(ProviderScope(overrides: [
+      treasuryProvider.overrideWithValue(model),
+    ], child: const MaterialApp(home: Scaffold(body: TransactionEntry()))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('amount_input')), '10000');
+    await tester.enterText(find.byKey(const Key('category_input')), 'Kas');
+    final button = find.byKey(const Key('submit_tx_btn'));
+    await tester.tap(button);
+    await tester.tap(button, warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(repo.calls.where((call) => call.startsWith('transaction:')),
+        hasLength(1));
+  });
+
   testWidgets('Dashboard pull to refresh reloads the overview', (tester) async {
     await pumpScreen(tester, FakeRepository(), const DashboardScreen());
     await tester.fling(find.byType(ListView), const Offset(0, 400), 1000);

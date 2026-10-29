@@ -1,5 +1,15 @@
 # Artefak Android — 28 Oktober 2026
 
+## 1.2.2 — tahan dobel dan pengamanan disk
+
+- Cek fingerprint + INSERT tetap di satu transaksi tulis (sqflite memakai
+  `BEGIN IMMEDIATE`); guard `saving` di tombol Simpan mencegah dobel tap saat
+  penulisan masih berjalan.
+- `onConfigure` kini menyalakan `busy_timeout=5000`, `journal_mode=WAL`, dan
+  `foreign_keys=ON` (per koneksi).
+- Manifest tidak lagi meminta `USE_BIOMETRIC`; tidak ada plugin biometrik di APK.
+- 72 tes host lulus; coverage 1582/1582 (100%).
+
 ## 1.2.1 — pembayaran per murid
 
 - Tab Anggota kini menampilkan status bayar bulan berjalan per murid
@@ -33,12 +43,12 @@ Belum ada bukti integrasi perangkat Android untuk 1.2.0 di sesi ini; lihat
 
 | Berkas | Ukuran | SHA-256 |
 | --- | --- | --- |
-| `dist/KasKelasKu-1.2.1-production.apk` | 54.371.175 byte | `f4352b9f275a837f06105e090e36c56aa2b0df28f20216c6e162f9e9a3f2f3c6` |
+| `dist/KasKelasKu-1.2.2-production.apk` | 54.371.122 byte | `774b45f8079f8cecbb2281d0af456a6a8ff8d280a476f2f25c19207c5452382b` |
 
 Mode release, ditandatangani keystore produksi. `apksigner verify` lulus untuk
 skema v1 dan v2; sertifikat `CN=KasKelasKu Production`,
 SHA-256 `d279ad4139e6b65a2440fa7d966a67c201639928cf3ba266e310df127cb4bd97`
-(sama dengan 1.1.1 dan 1.2.0, jadi pemasangan pembaruan tidak bentrok sertifikat).
+(sama dengan 1.1.1, 1.2.0 dan 1.2.1, jadi pemasangan pembaruan tidak bentrok sertifikat).
 
 Verifikasi checksum:
 
@@ -49,7 +59,7 @@ python3 tool/check_apks.py
 Pasang melalui pengelola berkas Android atau Android SDK:
 
 ```sh
-adb install -r dist/KasKelasKu-1.2.1-production.apk
+adb install -r dist/KasKelasKu-1.2.2-production.apk
 ```
 
 Jangan mengabaikan `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: kemungkinan sertifikat
