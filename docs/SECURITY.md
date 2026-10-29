@@ -15,7 +15,7 @@ Status: internal implementation review only, not an independent audit.
 
 ## Deliberate trade-off: no encryption
 
-KasKelasKu 1.2.0 stores everything unencrypted on purpose: SQLite plaintext,
+KasKelasKu 1.2.1 stores everything unencrypted on purpose: SQLite plaintext,
 JSON backups and plain PDF/CSV reports. There are no accounts, passwords or
 biometrics; anyone who opens the app can read and change data. Role checks are
 still enforced in the repository and by SQL triggers, but they are **not** a

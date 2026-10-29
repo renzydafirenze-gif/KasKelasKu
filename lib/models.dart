@@ -79,6 +79,14 @@ class CashTransaction {
       description: row['description']! as String);
 }
 
+class StudentPayment {
+  const StudentPayment(this.member, this.total, this.count);
+  final Member member;
+  final int total;
+  final int count;
+  bool get paid => count > 0;
+}
+
 class Overview {
   const Overview(
       {required this.balance,

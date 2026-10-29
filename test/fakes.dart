@@ -146,6 +146,27 @@ class FakeRepository extends TreasuryRepository {
   }
 
   @override
+  Future<List<StudentPayment>> studentPayments(String period) async {
+    if (fail) throw const AppError('Operasi ditolak.');
+    return people
+        .where((member) => member.role == Role.siswa && member.active)
+        .map((member) {
+      final rows = entries
+          .where((entry) => entry.isIncome && entry.contributorId == member.id);
+      return StudentPayment(member,
+          rows.fold<int>(0, (sum, entry) => sum + entry.amount), rows.length);
+    }).toList();
+  }
+
+  @override
+  Future<int> addStudents(List<String> names) async {
+    final clean = names.where((name) => name.trim().isNotEmpty).toList();
+    if (clean.isEmpty) throw const AppError('Nama harus 1–80 karakter.');
+    record('students:${clean.join('|')}');
+    return clean.length;
+  }
+
+  @override
   Future<void> addTransaction(CashTransaction entry,
       {bool confirmDuplicate = false}) async {
     entry.validate();

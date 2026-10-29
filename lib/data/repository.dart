@@ -329,6 +329,24 @@ class TreasuryRepository {
         .toList();
   }
 
+  /// Murid aktif beserta total setoran bulan [period]; belum bayar lebih dulu.
+  Future<List<StudentPayment>> studentPayments(String period) async {
+    validateMonth(period);
+    final db = await _database;
+    await _authorize(db);
+    final rows = await db.rawQuery('''SELECT u.id,u.name,u.role,u.active,
+      COALESCE(SUM(t.amount),0) AS total, COUNT(t.id) AS entries
+      FROM users u LEFT JOIN transactions t
+        ON t.contributor_id=u.id AND t.type='IN' AND substr(t.tx_date,1,7)=?
+      WHERE u.role=? AND u.active=1
+      GROUP BY u.id ORDER BY entries=0 DESC, u.name''',
+        [period, Role.siswa.name]);
+    return rows
+        .map((row) => StudentPayment(
+            Member.fromMap(row), row['total']! as int, row['entries']! as int))
+        .toList();
+  }
+
   Future<void> setTotalMonthlyTarget(String period, int amount) async {
     validateMonth(period);
     if (amount < 0 || amount > 1000000000000) {
@@ -355,6 +373,24 @@ class TreasuryRepository {
       await txn
           .insert('users', {'id': id, 'name': name.trim(), 'role': role.name});
       await _audit(txn, actor, 'member.add', id);
+    });
+  }
+
+  /// Tambah banyak murid sekaligus dari daftar nama.
+  Future<int> addStudents(List<String> names) async {
+    final clean = names.where((name) => name.trim().isNotEmpty).toList();
+    if (clean.isEmpty) throw const AppError('Nama harus 1–80 karakter.');
+    for (final name in clean) {
+      _validateName(name);
+    }
+    return _write({Role.bendahara}, (txn, actor) async {
+      for (final name in clean) {
+        final id = newId();
+        await txn.insert(
+            'users', {'id': id, 'name': name.trim(), 'role': Role.siswa.name});
+        await _audit(txn, actor, 'member.add', id);
+      }
+      return clean.length;
     });
   }
 

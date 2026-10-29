@@ -3,7 +3,7 @@
 Aplikasi kas kelas offline Android/iOS. Tanpa akun, tanpa sandi, tanpa enkripsi:
 buka aplikasi langsung masuk sebagai Bendahara.
 
-APK produksi terbaru: `dist/KasKelasKu-1.2.0-production.apk`.
+APK produksi terbaru: `dist/KasKelasKu-1.2.1-production.apk`.
 Petunjuk pemasangan, checksum dan signing: [`docs/ANDROID-RELEASE.md`](docs/ANDROID-RELEASE.md).
 
 ## Menjalankan
@@ -27,10 +27,16 @@ build rilis tidak memakai kunci debug.
 
 1. Buka aplikasi, isi nama. Pengguna pertama otomatis menjadi Bendahara.
 2. Tambah anggota dengan nama dan peran. Tidak ada sandi dan tidak ada ID akun.
-3. Ganti pengguna lewat chip nama di bilah atas atau kartu Pengguna di Setelan.
-4. Bendahara mencatat/menghapus transaksi, mengatur target kas bulanan, dan mengelola anggota.
-5. Ketua menyetujui dan mengunci bulan. Guru Wali memverifikasi setelah penguncian.
-6. Semua peran membaca saldo, riwayat, dan laporan. Backend tetap memeriksa peran tiap mutasi.
+   Untuk daftar murid satu kelas, pakai "Tambah banyak murid sekaligus"
+   (satu nama per baris).
+3. Tab Anggota menampilkan status bayar bulan ini per murid: Lunas beserta
+   nominalnya atau Belum bayar, plus ringkasan "x dari y murid sudah bayar".
+   Tombol Bayar pada baris murid langsung membuka entry dengan nama dan
+   kategori Kas terisi.
+4. Ganti pengguna lewat chip nama di bilah atas atau kartu Pengguna di Setelan.
+5. Bendahara mencatat/menghapus transaksi, mengatur target kas bulanan, dan mengelola anggota.
+6. Ketua menyetujui dan mengunci bulan. Guru Wali memverifikasi setelah penguncian.
+7. Semua peran membaca saldo, riwayat, dan laporan. Backend tetap memeriksa peran tiap mutasi.
 
 Entry transaksi: nominal dengan chip tambah cepat, chip penyetor, chip kategori,
 dan pemilih tanggal. Keterangan kosong otomatis memakai kategori.

@@ -118,6 +118,58 @@ void main() {
     expect(find.textContaining('Siti'), findsOneWidget);
   });
 
+  testWidgets('Members screen shows payment status and quick pay',
+      (tester) async {
+    final repo = FakeRepository()
+      ..entries = [
+        sampleEntry(contributorId: 'two', contributorName: 'Siti'),
+      ];
+    await pumpScreen(tester, repo, const MembersScreen());
+    expect(find.text('1 dari 1 murid sudah bayar'), findsOneWidget);
+    expect(find.textContaining('Lunas'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('pay_two')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TransactionEntry), findsOneWidget);
+    final chips = tester.widgetList<ChoiceChip>(find.byType(ChoiceChip)).where(
+        (chip) => chip.label is Text && (chip.label as Text).data == 'Siti');
+    expect(chips.single.selected, isTrue);
+    expect(find.text('Kas'), findsWidgets);
+  });
+
+  testWidgets('Unpaid filter narrows the list and shows the empty state',
+      (tester) async {
+    final repo = FakeRepository()
+      ..people = const [
+        Member('one', 'Budi', Role.bendahara),
+        Member('two', 'Siti', Role.siswa)
+      ]
+      ..entries = [
+        sampleEntry(contributorId: 'two', contributorName: 'Siti'),
+      ];
+    await pumpScreen(tester, repo, const MembersScreen());
+    await tester.tap(find.byKey(const Key('filter_unpaid_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('Siti'), findsNothing);
+    expect(find.text('Semua murid sudah bayar.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('filter_all_members')));
+    await tester.pumpAndSettle();
+    expect(find.text('Siti'), findsOneWidget);
+  });
+
+  testWidgets('Member sheet adds many students at once', (tester) async {
+    final repo = FakeRepository();
+    await pumpScreen(tester, repo, const MembersScreen());
+    await tester.tap(find.byKey(const Key('add_member_btn')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('toggle_bulk_member_btn')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('member_names_input')), 'Adi\nBudi, Citra');
+    await tester.tap(find.byKey(const Key('save_member_btn')));
+    await tester.pumpAndSettle();
+    expect(repo.calls, ['students:Adi|Budi|Citra']);
+  });
+
   testWidgets('Dashboard pull to refresh reloads the overview', (tester) async {
     await pumpScreen(tester, FakeRepository(), const DashboardScreen());
     await tester.fling(find.byType(ListView), const Offset(0, 400), 1000);

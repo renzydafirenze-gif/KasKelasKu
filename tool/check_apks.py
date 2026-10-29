@@ -1,11 +1,11 @@
-"""Verify the delivered 1.2.0 APK against its recorded checksum. Run from any cwd."""
+"""Verify the delivered 1.2.1 APK against its recorded checksum. Run from any cwd."""
 import hashlib
 from pathlib import Path
 import zipfile
 
 root = Path(__file__).resolve().parents[1] / 'dist'
 expected = {
-    'KasKelasKu-1.2.0-production.apk': '165f4a37f79c8e40d00423c4b5ee20308e6ee6671b62f8f62f90eb4f678304f1',
+    'KasKelasKu-1.2.1-production.apk': 'f4352b9f275a837f06105e090e36c56aa2b0df28f20216c6e162f9e9a3f2f3c6',
 }
 for name, digest in expected.items():
     file = root / name

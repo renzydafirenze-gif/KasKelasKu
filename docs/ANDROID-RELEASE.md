@@ -1,5 +1,16 @@
 # Artefak Android — 28 Oktober 2026
 
+## 1.2.1 — pembayaran per murid
+
+- Tab Anggota kini menampilkan status bayar bulan berjalan per murid
+  (Lunas beserta nominal atau Belum bayar), ringkasan "x dari y murid sudah bayar",
+  total terkumpul, dan filter Belum bayar.
+- Tombol Bayar pada baris murid membuka entry transaksi dengan nama penyetor dan
+  kategori Kas sudah terisi; nominal langsung bisa diketik.
+- Tambah banyak murid sekaligus dari satu kolom teks (satu nama per baris).
+- `studentPayments()` di repository menghitung setoran per murid per bulan.
+- 71 tes host lulus; coverage 1575/1575 (100%).
+
 ## 1.2.0 — tanpa enkripsi
 
 - Enkripsi dihapus sepenuhnya: `sqflite` polos, tanpa `flutter_secure_storage`,
@@ -22,12 +33,12 @@ Belum ada bukti integrasi perangkat Android untuk 1.2.0 di sesi ini; lihat
 
 | Berkas | Ukuran | SHA-256 |
 | --- | --- | --- |
-| `dist/KasKelasKu-1.2.0-production.apk` | 54.272.715 byte | `165f4a37f79c8e40d00423c4b5ee20308e6ee6671b62f8f62f90eb4f678304f1` |
+| `dist/KasKelasKu-1.2.1-production.apk` | 54.371.175 byte | `f4352b9f275a837f06105e090e36c56aa2b0df28f20216c6e162f9e9a3f2f3c6` |
 
 Mode release, ditandatangani keystore produksi. `apksigner verify` lulus untuk
 skema v1 dan v2; sertifikat `CN=KasKelasKu Production`,
 SHA-256 `d279ad4139e6b65a2440fa7d966a67c201639928cf3ba266e310df127cb4bd97`
-(sama dengan 1.1.1, jadi pemasangan pembaruan tidak bentrok sertifikat).
+(sama dengan 1.1.1 dan 1.2.0, jadi pemasangan pembaruan tidak bentrok sertifikat).
 
 Verifikasi checksum:
 
@@ -38,7 +49,7 @@ python3 tool/check_apks.py
 Pasang melalui pengelola berkas Android atau Android SDK:
 
 ```sh
-adb install -r dist/KasKelasKu-1.2.0-production.apk
+adb install -r dist/KasKelasKu-1.2.1-production.apk
 ```
 
 Jangan mengabaikan `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: kemungkinan sertifikat

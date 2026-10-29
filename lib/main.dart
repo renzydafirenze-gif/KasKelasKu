@@ -10,7 +10,7 @@ import 'data/repository.dart';
 import 'models.dart';
 import 'view_model.dart';
 
-const String appVersion = '1.2.0';
+const String appVersion = '1.2.1';
 
 // coverage:ignore-start
 void main() {
@@ -472,13 +472,18 @@ class HomeScreen extends HookConsumerWidget {
 }
 
 Future<void> openTransactionEntry(BuildContext context,
-    {String initialType = 'IN'}) {
+    {String initialType = 'IN',
+    String? contributorId,
+    String initialCategory = ''}) {
   return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => TransactionEntry(initialType: initialType));
+      builder: (_) => TransactionEntry(
+          initialType: initialType,
+          initialContributor: contributorId,
+          initialCategory: initialCategory));
 }
 
 Future<void> _showUserSheet(BuildContext context, WidgetRef ref) async {
@@ -1459,17 +1464,23 @@ class MembersScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(treasuryProvider).repository;
     final revision = ref.watch(revisionProvider);
-    final future = useMemoized(repo.members, [revision]);
+    final period = periodOf(DateTime.now());
+    final future = useMemoized(() async {
+      final members = await repo.members();
+      final students = await repo.studentPayments(period);
+      return (members, students);
+    }, [revision, period]);
     final snapshot = useFuture(future);
     final editable = ref.watch(sessionProvider)!.role == Role.bendahara;
-    final scheme = Theme.of(context).colorScheme;
+    final onlyUnpaid = useState(false);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
         child: Row(children: [
           Expanded(
-              child: Text('Anggota',
-                  style: Theme.of(context).textTheme.headlineMedium)),
+              child: Text('Anggota', style: theme.textTheme.headlineMedium)),
           if (editable)
             FilledButton.icon(
                 key: const Key('add_member_btn'),
@@ -1491,41 +1502,108 @@ class MembersScreen extends HookConsumerWidget {
         const Expanded(child: Center(child: CircularProgressIndicator()))
       else
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-            itemCount: snapshot.data!.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) {
-              final member = snapshot.data![i];
-              return Card(
-                child: ListTile(
-                  onTap: editable
-                      ? () => showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          showDragHandle: true,
-                          builder: (_) => MemberSheet(member: member))
-                      : null,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  leading: CircleAvatar(
-                      backgroundColor: scheme.primaryContainer,
-                      child: Text(
-                          member.name.trim().isEmpty
-                              ? '?'
-                              : member.name.trim()[0].toUpperCase(),
-                          style: TextStyle(
-                              color: scheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w700))),
-                  title: Text(member.name,
+            child: _memberList(
+                context, ref, snapshot.data!, editable, onlyUnpaid, period))
+    ]);
+  }
+
+  Widget _memberList(
+      BuildContext context,
+      WidgetRef ref,
+      (List<Member>, List<StudentPayment>) data,
+      bool editable,
+      ValueNotifier<bool> onlyUnpaid,
+      String period) {
+    final (members, students) = data;
+    final paid = students.where((row) => row.paid).length;
+    final totalPaid = students.fold<int>(0, (sum, row) => sum + row.total);
+    final byId = {for (final row in students) row.member.id: row};
+    final rows = onlyUnpaid.value && students.isNotEmpty
+        ? students.where((row) => !row.paid).map((row) => row.member).toList()
+        : members;
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+      children: [
+        if (students.isNotEmpty) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$paid dari ${students.length} murid sudah bayar',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                          value: paid / students.length, minHeight: 8),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                        'Terkumpul ${rupiah(totalPaid)} · ${monthLabel(period)}',
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ]),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, children: [
+            ChoiceChip(
+                key: const Key('filter_all_members'),
+                label: const Text('Semua'),
+                selected: !onlyUnpaid.value,
+                onSelected: (_) => onlyUnpaid.value = false),
+            ChoiceChip(
+                key: const Key('filter_unpaid_btn'),
+                label: Text('Belum bayar (${students.length - paid})'),
+                selected: onlyUnpaid.value,
+                onSelected: (_) => onlyUnpaid.value = true),
+          ]),
+          const SizedBox(height: 8),
+        ],
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            child: Text('Semua murid sudah bayar.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant)),
+          ),
+        for (final member in rows) ...[
+          Card(
+            child: ListTile(
+              onTap: editable
+                  ? () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: true,
+                      builder: (_) => MemberSheet(member: member))
+                  : null,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              leading: CircleAvatar(
+                  backgroundColor: scheme.primaryContainer,
+                  child: Text(
+                      member.name.trim().isEmpty
+                          ? '?'
+                          : member.name.trim()[0].toUpperCase(),
                       style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: member.active
-                              ? scheme.onSurface
-                              : scheme.onSurfaceVariant)),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(children: [
+                          color: scheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w700))),
+              title: Text(member.name,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: member.active
+                          ? scheme.onSurface
+                          : scheme.onSurfaceVariant)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
@@ -1538,24 +1616,56 @@ class MembersScreen extends HookConsumerWidget {
                                 fontWeight: FontWeight.w600,
                                 color: scheme.onSurfaceVariant)),
                       ),
-                      if (!member.active) ...[
-                        const SizedBox(width: 6),
+                      if (byId[member.id] != null)
+                        _PaymentBadge(payment: byId[member.id]!),
+                      if (!member.active)
                         Text('nonaktif',
                             style: TextStyle(
                                 fontSize: 11, color: scheme.onSurfaceVariant)),
-                      ],
                     ]),
-                  ),
-                  trailing: editable
+              ),
+              trailing: editable && member.role == Role.siswa
+                  ? FilledButton.tonalIcon(
+                      key: Key('pay_${member.id}'),
+                      onPressed: () => openTransactionEntry(context,
+                          contributorId: member.id, initialCategory: 'Kas'),
+                      icon: const Icon(Icons.payments_outlined, size: 16),
+                      label: const Text('Bayar'))
+                  : editable
                       ? Icon(Icons.chevron_right,
                           color: scheme.onSurfaceVariant)
                       : null,
-                ),
-              );
-            },
+            ),
           ),
-        ),
-    ]);
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _PaymentBadge extends StatelessWidget {
+  const _PaymentBadge({required this.payment});
+  final StudentPayment payment;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+          color: payment.paid
+              ? scheme.primaryContainer
+              : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20)),
+      child: Text(
+          payment.paid ? 'Lunas · ${rupiah(payment.total)}' : 'Belum bayar',
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: payment.paid
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant)),
+    );
   }
 }
 
@@ -1565,7 +1675,9 @@ class MemberSheet extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final editing = member != null;
+    final bulk = useState(false);
     final name = useTextEditingController(text: member?.name ?? '');
+    final names = useTextEditingController();
     final role = useState(member?.role ?? Role.siswa);
     final active = useState(member?.active ?? true);
     final busy = useState(false);
@@ -1577,27 +1689,48 @@ class MemberSheet extends HookConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(editing ? 'Ubah anggota' : 'Tambah anggota',
+            Text(
+                editing
+                    ? 'Ubah anggota'
+                    : bulk.value
+                        ? 'Tambah banyak murid'
+                        : 'Tambah anggota',
                 style: theme.textTheme.titleLarge),
             const SizedBox(height: 16),
-            TextField(
-              key: const Key('member_name_input'),
-              controller: name,
-              enabled: !editing,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Nama'),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<Role>(
-              value: role.value,
-              decoration: const InputDecoration(labelText: 'Peran'),
-              items: Role.values
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) role.value = value;
-              },
-            ),
+            if (bulk.value)
+              TextField(
+                key: const Key('member_names_input'),
+                controller: names,
+                autofocus: true,
+                minLines: 5,
+                maxLines: 10,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    labelText: 'Nama murid',
+                    hintText: 'Satu nama per baris',
+                    alignLabelWithHint: true),
+              )
+            else ...[
+              TextField(
+                key: const Key('member_name_input'),
+                controller: name,
+                enabled: !editing,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Nama'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<Role>(
+                value: role.value,
+                decoration: const InputDecoration(labelText: 'Peran'),
+                items: Role.values
+                    .map(
+                        (r) => DropdownMenuItem(value: r, child: Text(r.label)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) role.value = value;
+                },
+              ),
+            ],
             if (editing) ...[
               const SizedBox(height: 4),
               SwitchListTile(
@@ -1606,7 +1739,18 @@ class MemberSheet extends HookConsumerWidget {
                   value: active.value,
                   onChanged: (value) => active.value = value),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            if (!editing)
+              TextButton.icon(
+                  key: const Key('toggle_bulk_member_btn'),
+                  onPressed: () => bulk.value = !bulk.value,
+                  icon: Icon(bulk.value
+                      ? Icons.person_add_outlined
+                      : Icons.playlist_add),
+                  label: Text(bulk.value
+                      ? 'Tambah satu per satu'
+                      : 'Tambah banyak murid sekaligus')),
+            const SizedBox(height: 4),
             FilledButton(
                 key: const Key('save_member_btn'),
                 onPressed: busy.value
@@ -1618,6 +1762,11 @@ class MemberSheet extends HookConsumerWidget {
                           if (editing) {
                             await repo.changeMember(
                                 member!, role.value, active.value);
+                          } else if (bulk.value) {
+                            await repo.addStudents(names.text
+                                .split(RegExp(r'[\n,]'))
+                                .map((row) => row.trim())
+                                .toList());
                           } else {
                             await repo.addMember(name.text, role.value);
                           }
@@ -1793,16 +1942,22 @@ class SettingsScreen extends HookConsumerWidget {
 }
 
 class TransactionEntry extends HookConsumerWidget {
-  const TransactionEntry({super.key, this.initialType = 'IN'});
+  const TransactionEntry(
+      {super.key,
+      this.initialType = 'IN',
+      this.initialContributor,
+      this.initialCategory = ''});
   final String initialType;
+  final String? initialContributor;
+  final String initialCategory;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final amount = useTextEditingController();
-    final category = useTextEditingController();
+    final category = useTextEditingController(text: initialCategory);
     final description = useTextEditingController();
     final date = useState(DateTime.now());
     final type = useState(initialType);
-    final contributor = useState<String?>(null);
+    final contributor = useState<String?>(initialContributor);
     final busy = useState(false);
     final membersFuture =
         useMemoized(() => ref.read(treasuryProvider).repository.members());

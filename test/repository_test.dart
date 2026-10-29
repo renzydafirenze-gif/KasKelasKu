@@ -121,6 +121,34 @@ void main() {
     await expectLater(repo.deleteTransaction(9999), throwsA(isA<AppError>()));
   });
 
+  test('Student payments track who already paid this month', () async {
+    await repo.createOwner('Budi');
+    await repo.addMember('Siti', Role.siswa);
+    await repo.addMember('Adi', Role.siswa);
+    await repo.addMember('Ketua', Role.ketua);
+    final siti = (await repo.members()).firstWhere((m) => m.name == 'Siti');
+    await repo.addTransaction(entry(contributorId: siti.id, amount: 12000));
+
+    final payments = await repo.studentPayments('2026-10');
+    expect(payments.map((row) => row.member.name), ['Adi', 'Siti']);
+    expect(payments.first.paid, isFalse);
+    expect(payments.last.total, 12000);
+    expect(payments.last.count, 1);
+    expect((await repo.studentPayments('2026-09')).every((row) => !row.paid),
+        isTrue);
+    await expectLater(
+        repo.studentPayments('2026-13'), throwsA(isA<AppError>()));
+  });
+
+  test('Bulk student import skips blanks and rejects bad names', () async {
+    await repo.createOwner('Budi');
+    expect(await repo.addStudents(['Siti', '  ', 'Adi']), 2);
+    expect((await repo.members()).where((m) => m.role == Role.siswa),
+        hasLength(2));
+    await expectLater(repo.addStudents([' ', '']), throwsA(isA<AppError>()));
+    await expectLater(repo.addStudents(['x' * 81]), throwsA(isA<AppError>()));
+  });
+
   test('Role checks, approvals, locks and member changes', () async {
     final owner = await repo.createOwner('Budi');
     await repo.addMember('Siti', Role.siswa);
