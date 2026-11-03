@@ -1,5 +1,17 @@
 # Artefak Android — 28 Oktober 2026
 
+## 1.2.4 — iuran per murid
+
+- Status Lunas tidak lagi hanya "ada setoran". Sheet Atur target kini punya
+  **Iuran per murid**; lunas hanya bila total setoran murid bulan itu mencapai
+  nominal tersebut. Setoran sebagian tampil "Kurang Rp …" dan ikut filter
+  Belum lunas.
+- Tabel baru `monthly_dues` (skema database v2). Database v1 otomatis
+  ditambah tabel ini saat aplikasi pertama dibuka; data lama tidak diubah.
+- Cadangan versi lama (tanpa `monthly_dues`) tetap bisa dipulihkan; kolom
+  iuran dianggap kosong.
+- 76 tes host lulus; coverage 1628/1628 (100%).
+
 ## 1.2.3 — APK per arsitektur
 
 - APK dipecah per ABI. Arm64 (mayoritas HP) 19,1 MB, arm32 16,9 MB; sebelumnya
@@ -50,8 +62,8 @@ Belum ada bukti integrasi perangkat Android untuk 1.2.0 di sesi ini; lihat
 
 | Berkas | ABI | Ukuran | SHA-256 |
 | --- | --- | --- | --- |
-| `dist/KasKelasKu-1.2.3-arm64.apk` | arm64-v8a | 19.099.196 byte | `63c7a3ef1f984fbee37b348cc1e8c04a7e9100ff10477047677515b3d3e611d6` |
-| `dist/KasKelasKu-1.2.3-armeabi-v7a.apk` | armeabi-v7a | 16.934.675 byte | `e6e6329c41d213598b7122c3b6417fb787c3d63f9a9746e9256d7a35110fd060` |
+| `dist/KasKelasKu-1.2.4-arm64.apk` | arm64-v8a | 19.099.209 byte | `684a40ed69d8847aa4c624566ad2dd9afa94ba356e1ca0063aba757cfaa3273d` |
+| `dist/KasKelasKu-1.2.4-armeabi-v7a.apk` | armeabi-v7a | 16.934.695 byte | `c410498976cd7b277ff1a5e8714272ebab092c083925fb6bfd11d94445e4d1de` |
 
 Pakai `arm64` dulu; kalau pemasangan gagal dengan `INSTALL_FAILED_NO_MATCHING_ABIS`,
 HP-nya 32-bit dan pakai `armeabi-v7a`.
@@ -59,7 +71,7 @@ HP-nya 32-bit dan pakai `armeabi-v7a`.
 Mode release, ditandatangani keystore produksi. `apksigner verify` lulus untuk
 skema v1 dan v2; sertifikat `CN=KasKelasKu Production`,
 SHA-256 `d279ad4139e6b65a2440fa7d966a67c201639928cf3ba266e310df127cb4bd97`
-(sama dengan 1.1.1, 1.2.0, 1.2.1 dan 1.2.2, jadi pemasangan pembaruan tidak bentrok sertifikat).
+(sama dengan 1.1.1, 1.2.0, 1.2.1, 1.2.2 dan 1.2.3, jadi pemasangan pembaruan tidak bentrok sertifikat).
 
 Verifikasi checksum:
 
@@ -70,7 +82,7 @@ python3 tool/check_apks.py
 Pasang melalui pengelola berkas Android atau Android SDK:
 
 ```sh
-adb install -r dist/KasKelasKu-1.2.3-arm64.apk
+adb install -r dist/KasKelasKu-1.2.4-arm64.apk
 ```
 
 Jangan mengabaikan `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: kemungkinan sertifikat

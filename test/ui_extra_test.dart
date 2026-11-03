@@ -12,7 +12,7 @@ import 'fakes.dart';
 
 Future<Database> openPlain(String path) => databaseFactoryFfi.openDatabase(path,
     options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, _) async {
           for (final sql in (await rootBundle.loadString('lib/data/schema.sql'))
               .split('-- @statement')) {
@@ -125,7 +125,7 @@ void main() {
         sampleEntry(contributorId: 'two', contributorName: 'Siti'),
       ];
     await pumpScreen(tester, repo, const MembersScreen());
-    expect(find.text('1 dari 1 murid sudah bayar'), findsOneWidget);
+    expect(find.text('1 dari 1 murid lunas'), findsOneWidget);
     expect(find.textContaining('Lunas'), findsOneWidget);
     await tester.tap(find.byKey(const Key('pay_two')));
     await tester.pumpAndSettle();
@@ -154,6 +154,35 @@ void main() {
     await tester.tap(find.byKey(const Key('filter_all_members')));
     await tester.pumpAndSettle();
     expect(find.text('Siti'), findsOneWidget);
+  });
+
+  testWidgets('Partial payment shows the remaining amount', (tester) async {
+    final repo = FakeRepository()
+      ..due = 10000
+      ..entries = [
+        sampleEntry(
+            contributorId: 'two', contributorName: 'Siti', amount: 5000),
+      ];
+    await pumpScreen(tester, repo, const MembersScreen());
+    expect(find.text('0 dari 1 murid lunas'), findsOneWidget);
+    expect(find.text('Kurang Rp 5.000'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('filter_unpaid_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('Siti'), findsOneWidget);
+  });
+
+  testWidgets('Target sheet preloads and saves the monthly due',
+      (tester) async {
+    final repo = FakeRepository()..due = 5000;
+    await pumpScreen(tester, repo, const DashboardScreen());
+    await tester.tap(find.byKey(const Key('edit_target_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('5000'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('due_input')), '10000');
+    await tester.tap(find.byKey(const Key('save_target_btn')));
+    await tester.pumpAndSettle();
+    final period = periodOf(DateTime.now());
+    expect(repo.calls, contains('due:$period:10000'));
   });
 
   testWidgets('Member sheet adds many students at once', (tester) async {

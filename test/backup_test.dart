@@ -52,6 +52,40 @@ void main() {
     }
   });
 
+  test('Monthly dues are optional but validated when present', () {
+    expect(Backup(empty()).tables['monthly_dues'], isEmpty);
+    final valid = Backup({
+      ...empty(),
+      'monthly_dues': [
+        {'period': '2026-10', 'amount': 5000}
+      ]
+    });
+    expect(valid.tables['monthly_dues'], hasLength(1));
+    for (final broken in [
+      [
+        {'period': '2026-10'}
+      ],
+      [
+        {'period': 202610, 'amount': 5000}
+      ],
+      [
+        {'period': '2026-10', 'amount': '5000'}
+      ],
+      [
+        {'period': '2026-10', 'amount': -1}
+      ],
+      [
+        {'period': '2026-10', 'amount': 1000000000001}
+      ],
+      [
+        {'period': '2026-13', 'amount': 5000}
+      ],
+    ]) {
+      expect(() => Backup({...empty(), 'monthly_dues': broken}),
+          throwsA(isA<AppError>()));
+    }
+  });
+
   test('Backup rejects duplicate identities, unknown roles and invalid periods',
       () {
     for (final broken in [

@@ -6,11 +6,11 @@ import zipfile
 root = Path(__file__).resolve().parents[1] / 'dist'
 # name -> (sha256, expected ABI)
 expected = {
-    'KasKelasKu-1.2.3-arm64.apk': (
-        '63c7a3ef1f984fbee37b348cc1e8c04a7e9100ff10477047677515b3d3e611d6',
+    'KasKelasKu-1.2.4-arm64.apk': (
+        '684a40ed69d8847aa4c624566ad2dd9afa94ba356e1ca0063aba757cfaa3273d',
         'arm64-v8a'),
-    'KasKelasKu-1.2.3-armeabi-v7a.apk': (
-        'e6e6329c41d213598b7122c3b6417fb787c3d63f9a9746e9256d7a35110fd060',
+    'KasKelasKu-1.2.4-armeabi-v7a.apk': (
+        'c410498976cd7b277ff1a5e8714272ebab092c083925fb6bfd11d94445e4d1de',
         'armeabi-v7a'),
 }
 for name, (digest, abi) in expected.items():

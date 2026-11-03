@@ -34,7 +34,7 @@ class TreasuryRepository {
       return _db = await openForTesting!(path);
     }
     await _quarantineLegacy(path);
-    return _db = await openDatabase(path, version: 1, onConfigure: (db) async {
+    return _db = await openDatabase(path, version: 2, onConfigure: (db) async {
       // busy_timeout dan journal_mode mengembalikan baris, jadi pakai rawQuery
       // agar tidak error di Android execSQL; foreign_keys tidak.
       await db.rawQuery('PRAGMA busy_timeout=5000');
@@ -44,6 +44,14 @@ class TreasuryRepository {
       final schema = await rootBundle.loadString('lib/data/schema.sql');
       for (final statement in schema.split('-- @statement')) {
         if (statement.trim().isNotEmpty) await db.execute(statement);
+      }
+    }, onUpgrade: (db, oldVersion, _) async {
+      // v2: iuran per murid, dipakai untuk status lunas.
+      if (oldVersion < 2) {
+        await db.execute('''CREATE TABLE monthly_dues (
+          period TEXT PRIMARY KEY CHECK(length(period)=7 AND substr(period,6,2) BETWEEN '01' AND '12'),
+          amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND 1000000000000)
+        )''');
       }
     });
   }
@@ -338,6 +346,7 @@ class TreasuryRepository {
     validateMonth(period);
     final db = await _database;
     await _authorize(db);
+    final due = await monthlyDue(period);
     final rows = await db.rawQuery('''SELECT u.id,u.name,u.role,u.active,
       COALESCE(SUM(t.amount),0) AS total, COUNT(t.id) AS entries
       FROM users u LEFT JOIN transactions t
@@ -346,9 +355,19 @@ class TreasuryRepository {
       GROUP BY u.id ORDER BY entries=0 DESC, u.name''',
         [period, Role.siswa.name]);
     return rows
-        .map((row) => StudentPayment(
-            Member.fromMap(row), row['total']! as int, row['entries']! as int))
+        .map((row) => StudentPayment(Member.fromMap(row), row['total']! as int,
+            row['entries']! as int, due))
         .toList();
+  }
+
+  /// Iuran per murid untuk [period]; 0 berarti belum diatur.
+  Future<int> monthlyDue(String period) async {
+    validateMonth(period);
+    final db = await _database;
+    await _authorize(db);
+    final rows =
+        await db.query('monthly_dues', where: 'period=?', whereArgs: [period]);
+    return rows.isEmpty ? 0 : rows.single['amount']! as int;
   }
 
   Future<void> setTotalMonthlyTarget(String period, int amount) async {
@@ -361,6 +380,18 @@ class TreasuryRepository {
           'monthly_total_targets', {'period': period, 'amount': amount},
           conflictAlgorithm: ConflictAlgorithm.replace);
       await _audit(txn, actor, 'target.total.set', '$period:$amount');
+    });
+  }
+
+  Future<void> setMonthlyDue(String period, int amount) async {
+    validateMonth(period);
+    if (amount < 0 || amount > 1000000000000) {
+      throw const AppError('Iuran tidak valid.');
+    }
+    await _write({Role.bendahara}, (txn, actor) async {
+      await txn.insert('monthly_dues', {'period': period, 'amount': amount},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      await _audit(txn, actor, 'due.set', '$period:$amount');
     });
   }
 

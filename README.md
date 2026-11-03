@@ -3,7 +3,7 @@
 Aplikasi kas kelas offline Android/iOS. Tanpa akun, tanpa sandi, tanpa enkripsi:
 buka aplikasi langsung masuk sebagai Bendahara.
 
-APK produksi terbaru: `dist/KasKelasKu-1.2.3-arm64.apk` (19 MB), arm32: `dist/KasKelasKu-1.2.3-armeabi-v7a.apk` (17 MB).
+APK produksi terbaru: `dist/KasKelasKu-1.2.4-arm64.apk` (19 MB), arm32: `dist/KasKelasKu-1.2.4-armeabi-v7a.apk` (17 MB).
 Petunjuk pemasangan, checksum dan signing: [`docs/ANDROID-RELEASE.md`](docs/ANDROID-RELEASE.md).
 
 ## Menjalankan
@@ -43,6 +43,9 @@ dan pemilih tanggal. Keterangan kosong otomatis memakai kategori.
 Duplikat fingerprint meminta konfirmasi sebelum disimpan.
 
 Target kas adalah target total kelas per bulan, bukan target per siswa.
+Iuran per murid diatur terpisah di sheet Atur target: status Lunas baru muncul
+kalau total setoran murid bulan itu mencapai iuran tersebut, dan setoran
+sebagian ditandai "Kurang Rp …".
 Riwayat dipaginasi 100 baris dengan pencarian dan filter bulan.
 
 ## Data

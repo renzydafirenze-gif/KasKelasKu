@@ -6,7 +6,7 @@ import 'package:kaskelasku/data/repository.dart';
 
 Future<Database> openPlain(String path) => databaseFactoryFfi.openDatabase(path,
     options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, _) async {
           for (final sql in (await rootBundle.loadString('lib/data/schema.sql'))
               .split('-- @statement')) {

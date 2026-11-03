@@ -80,11 +80,18 @@ class CashTransaction {
 }
 
 class StudentPayment {
-  const StudentPayment(this.member, this.total, this.count);
+  const StudentPayment(this.member, this.total, this.count, this.due);
   final Member member;
   final int total;
   final int count;
+
+  /// Iuran per murid bulan ini; 0 berarti tidak diatur.
+  final int due;
   bool get paid => count > 0;
+
+  /// Lunas hanya kalau setoran mencapai iuran; tanpa iuran, setoran apa pun lunas.
+  bool get settled => due > 0 ? total >= due : paid;
+  int get remaining => due > total ? due - total : 0;
 }
 
 class Overview {

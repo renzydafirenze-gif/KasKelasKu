@@ -8,7 +8,7 @@ import 'package:kaskelasku/models.dart';
 
 Future<Database> openPlain(String path) => databaseFactoryFfi.openDatabase(path,
     options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, _) async {
           for (final sql in (await rootBundle.loadString('lib/data/schema.sql'))
               .split('-- @statement')) {
@@ -138,6 +138,48 @@ void main() {
         isTrue);
     await expectLater(
         repo.studentPayments('2026-13'), throwsA(isA<AppError>()));
+
+    expect(await repo.monthlyDue('2026-10'), 0);
+    await repo.setMonthlyDue('2026-10', 15000);
+    final withDue = await repo.studentPayments('2026-10');
+    expect(withDue.last.due, 15000);
+    expect(withDue.last.settled, isFalse);
+    expect(withDue.last.remaining, 3000);
+    expect(withDue.first.settled, isFalse);
+    expect(withDue.first.remaining, 15000);
+    await repo.addTransaction(
+        entry(contributorId: siti.id, amount: 3000, description: 'Pelunasan'));
+    final settled = (await repo.studentPayments('2026-10')).last;
+    expect(settled.settled, isTrue);
+    expect(settled.remaining, 0);
+    await expectLater(
+        repo.setMonthlyDue('2026-10', -1), throwsA(isA<AppError>()));
+    await expectLater(
+        repo.setMonthlyDue('2026-13', 1), throwsA(isA<AppError>()));
+  });
+
+  test('Version 1 database gains the monthly dues table on upgrade', () async {
+    databaseFactory = databaseFactoryFfi;
+    final path = '${directory.path}/v1.db';
+    final legacy = await databaseFactoryFfi.openDatabase(path,
+        options: OpenDatabaseOptions(
+            version: 1,
+            onCreate: (db, _) async {
+              for (final sql
+                  in (await rootBundle.loadString('lib/data/schema.sql'))
+                      .split('-- @statement')) {
+                if (!sql.contains('monthly_dues')) await db.execute(sql);
+              }
+            }));
+    await legacy.close();
+    final upgraded = TreasuryRepository(pathOverride: path);
+    try {
+      await upgraded.createOwner('Budi');
+      await upgraded.setMonthlyDue('2026-10', 10000);
+      expect(await upgraded.monthlyDue('2026-10'), 10000);
+    } finally {
+      await upgraded.close();
+    }
   });
 
   test('Bulk student import skips blanks and rejects bad names', () async {
@@ -200,9 +242,11 @@ void main() {
     final student = (await repo.members()).firstWhere((m) => m.name == 'Siti');
     await repo.addTransaction(entry(contributorId: student.id));
     await repo.setTotalMonthlyTarget('2026-10', 50000);
+    await repo.setMonthlyDue('2026-10', 10000);
     final snapshot = await repo.backupSnapshot();
     expect(snapshot.keys, containsAll(Backup.columns.keys));
     expect(snapshot['monthly_total_targets'], hasLength(1));
+    expect(snapshot['monthly_dues'], hasLength(1));
     final backup = Backup(snapshot);
 
     final otherDir = await Directory.systemTemp.createTemp('kk-restore-');
@@ -215,6 +259,7 @@ void main() {
       expect(await target.members(), hasLength(2));
       expect(await target.history(), hasLength(1));
       expect((await target.overview('2026-10')).target, 50000);
+      expect(await target.monthlyDue('2026-10'), 10000);
       await expectLater(target.restore(backup), throwsA(isA<AppError>()));
     } finally {
       await target.close();

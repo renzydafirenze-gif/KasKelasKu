@@ -8,6 +8,10 @@ class Backup {
     }
     for (final table in columns.keys) {
       final raw = source[table];
+      if (raw == null && optionalTables.contains(table)) {
+        tables[table] = [];
+        continue;
+      }
       if (raw is! List || raw.length > 100000) {
         throw const AppError('Isi cadangan tidak valid atau terlalu besar.');
       }
@@ -80,6 +84,16 @@ class Backup {
         throw const AppError('Target cadangan tidak valid.');
       }
     }
+    for (final row in tables['monthly_dues']!) {
+      if (row['period'] is! String || row['amount'] is! int) {
+        throw const AppError('Iuran cadangan tidak valid.');
+      }
+      validateMonth(row['period']! as String);
+      if ((row['amount']! as int) < 0 ||
+          (row['amount']! as int) > 1000000000000) {
+        throw const AppError('Iuran cadangan tidak valid.');
+      }
+    }
     for (final row in tables['audit_log']!) {
       if (row['id'] is! int ||
           !ids.contains(row['actor']) ||
@@ -115,7 +129,11 @@ class Backup {
       'verified_at'
     },
     'monthly_total_targets': {'period', 'amount'},
+    'monthly_dues': {'period', 'amount'},
     'audit_log': {'id', 'actor', 'action', 'target', 'at'},
   };
+
+  /// Tabel yang boleh tidak ada di cadangan versi lama (skema 1).
+  static const optionalTables = {'monthly_dues'};
   final tables = <String, List<Map<String, Object?>>>{};
 }

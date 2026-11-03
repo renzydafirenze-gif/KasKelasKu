@@ -49,6 +49,7 @@ class FakeRepository extends TreasuryRepository {
         description: 'Sapu'),
   ];
   int target = 20000;
+  int due = 0;
 
   void record(String value) {
     if (fail) throw const AppError('Operasi ditolak.');
@@ -154,8 +155,11 @@ class FakeRepository extends TreasuryRepository {
         .map((member) {
       final rows = entries
           .where((entry) => entry.isIncome && entry.contributorId == member.id);
-      return StudentPayment(member,
-          rows.fold<int>(0, (sum, entry) => sum + entry.amount), rows.length);
+      return StudentPayment(
+          member,
+          rows.fold<int>(0, (sum, entry) => sum + entry.amount),
+          rows.length,
+          due);
     }).toList();
   }
 
@@ -181,6 +185,16 @@ class FakeRepository extends TreasuryRepository {
   Future<void> deleteTransaction(int id) async {
     if (failDelete) throw const AppError('Operasi ditolak.');
     record('delete:$id');
+  }
+
+  @override
+  Future<int> monthlyDue(String period) async => due;
+
+  @override
+  Future<void> setMonthlyDue(String period, int amount) async {
+    if (amount < 0) throw const AppError('Iuran tidak valid.');
+    due = amount;
+    record('due:$period:$amount');
   }
 
   @override

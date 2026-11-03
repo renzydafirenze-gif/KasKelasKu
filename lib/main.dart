@@ -10,7 +10,7 @@ import 'data/repository.dart';
 import 'models.dart';
 import 'view_model.dart';
 
-const String appVersion = '1.2.3';
+const String appVersion = '1.2.4';
 
 // coverage:ignore-start
 void main() {
@@ -1400,6 +1400,17 @@ class TargetSheet extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final amount =
         useTextEditingController(text: current == 0 ? '' : '$current');
+    final dueText = useTextEditingController();
+    final due = useFuture(useMemoized(
+        () => ref.read(treasuryProvider).repository.monthlyDue(period)));
+    final prefilled = useRef(false);
+    useEffect(() {
+      if (due.hasData && !prefilled.value) {
+        prefilled.value = true;
+        if (due.data! > 0) dueText.text = '${due.data}';
+      }
+      return null;
+    }, [due.hasData]);
     final busy = useState(false);
     final theme = Theme.of(context);
     return Padding(
@@ -1411,10 +1422,6 @@ class TargetSheet extends HookConsumerWidget {
           children: [
             Text('Target ${monthLabel(period)}',
                 style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('Target kas keseluruhan bulan ini.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 16),
             TextField(
               key: const Key('target_input'),
@@ -1423,7 +1430,9 @@ class TargetSheet extends HookConsumerWidget {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: const InputDecoration(
-                  labelText: 'Target rupiah', prefixText: 'Rp '),
+                  labelText: 'Target kas bulan ini',
+                  helperText: 'Total kas yang ingin dikumpulkan bulan ini.',
+                  prefixText: 'Rp '),
             ),
             const SizedBox(height: 12),
             Wrap(spacing: 8, children: [
@@ -1432,19 +1441,40 @@ class TargetSheet extends HookConsumerWidget {
                     label: Text(rupiah(value)),
                     onPressed: () => amount.text = '$value'),
             ]),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('due_input'),
+              controller: dueText,
+              enabled: due.hasData,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                  labelText: 'Iuran per murid',
+                  helperText:
+                      'Status Lunas bila setoran murid mencapai nominal ini.',
+                  prefixText: 'Rp '),
+            ),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, children: [
+              for (final value in [5000, 10000, 15000, 20000])
+                ActionChip(
+                    label: Text(rupiah(value)),
+                    onPressed:
+                        due.hasData ? () => dueText.text = '$value' : null),
+            ]),
             const SizedBox(height: 20),
             FilledButton(
                 key: const Key('save_target_btn'),
-                onPressed: busy.value
+                onPressed: busy.value || !due.hasData
                     ? null
                     : () async {
                         busy.value = true;
                         try {
-                          await ref
-                              .read(treasuryProvider)
-                              .repository
-                              .setTotalMonthlyTarget(
-                                  period, int.tryParse(amount.text) ?? -1);
+                          final repo = ref.read(treasuryProvider).repository;
+                          await repo.setTotalMonthlyTarget(
+                              period, int.tryParse(amount.text) ?? -1);
+                          await repo.setMonthlyDue(
+                              period, int.tryParse(dueText.text) ?? -1);
                           if (context.mounted) Navigator.pop(context);
                         } catch (error) {
                           if (context.mounted) await showError(context, error);
@@ -1452,7 +1482,7 @@ class TargetSheet extends HookConsumerWidget {
                           busy.value = false;
                         }
                       },
-                child: Text(busy.value ? 'Menyimpan…' : 'Simpan target')),
+                child: Text(busy.value ? 'Menyimpan…' : 'Simpan')),
           ]),
     );
   }
@@ -1515,11 +1545,14 @@ class MembersScreen extends HookConsumerWidget {
       ValueNotifier<bool> onlyUnpaid,
       String period) {
     final (members, students) = data;
-    final paid = students.where((row) => row.paid).length;
+    final settled = students.where((row) => row.settled).length;
     final totalPaid = students.fold<int>(0, (sum, row) => sum + row.total);
     final byId = {for (final row in students) row.member.id: row};
     final rows = onlyUnpaid.value && students.isNotEmpty
-        ? students.where((row) => !row.paid).map((row) => row.member).toList()
+        ? students
+            .where((row) => !row.settled)
+            .map((row) => row.member)
+            .toList()
         : members;
     final scheme = Theme.of(context).colorScheme;
     return ListView(
@@ -1532,13 +1565,13 @@ class MembersScreen extends HookConsumerWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('$paid dari ${students.length} murid sudah bayar',
+                    Text('$settled dari ${students.length} murid lunas',
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
-                          value: paid / students.length, minHeight: 8),
+                          value: settled / students.length, minHeight: 8),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -1557,7 +1590,7 @@ class MembersScreen extends HookConsumerWidget {
                 onSelected: (_) => onlyUnpaid.value = false),
             ChoiceChip(
                 key: const Key('filter_unpaid_btn'),
-                label: Text('Belum bayar (${students.length - paid})'),
+                label: Text('Belum lunas (${students.length - settled})'),
                 selected: onlyUnpaid.value,
                 onSelected: (_) => onlyUnpaid.value = true),
           ]),
@@ -1653,16 +1686,20 @@ class _PaymentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-          color: payment.paid
+          color: payment.settled
               ? scheme.primaryContainer
               : scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(20)),
       child: Text(
-          payment.paid ? 'Lunas · ${rupiah(payment.total)}' : 'Belum bayar',
+          payment.settled
+              ? 'Lunas · ${rupiah(payment.total)}'
+              : payment.paid
+                  ? 'Kurang ${rupiah(payment.remaining)}'
+                  : 'Belum bayar',
           style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: payment.paid
+              color: payment.settled
                   ? scheme.onPrimaryContainer
                   : scheme.onSurfaceVariant)),
     );
