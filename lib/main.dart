@@ -10,7 +10,7 @@ import 'data/repository.dart';
 import 'models.dart';
 import 'view_model.dart';
 
-const String appVersion = '1.2.2';
+const String appVersion = '1.2.3';
 
 // coverage:ignore-start
 void main() {

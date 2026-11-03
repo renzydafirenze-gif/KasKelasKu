@@ -3,7 +3,7 @@
 Aplikasi kas kelas offline Android/iOS. Tanpa akun, tanpa sandi, tanpa enkripsi:
 buka aplikasi langsung masuk sebagai Bendahara.
 
-APK produksi terbaru: `dist/KasKelasKu-1.2.2-production.apk`.
+APK produksi terbaru: `dist/KasKelasKu-1.2.3-arm64.apk` (19 MB), arm32: `dist/KasKelasKu-1.2.3-armeabi-v7a.apk` (17 MB).
 Petunjuk pemasangan, checksum dan signing: [`docs/ANDROID-RELEASE.md`](docs/ANDROID-RELEASE.md).
 
 ## Menjalankan

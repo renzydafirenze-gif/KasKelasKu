@@ -1,5 +1,12 @@
 # Artefak Android — 28 Oktober 2026
 
+## 1.2.3 — APK per arsitektur
+
+- APK dipecah per ABI. Arm64 (mayoritas HP) 19,1 MB, arm32 16,9 MB; sebelumnya
+  satu APK universal 54,4 MB karena memuat tiga arsitektur sekaligus.
+- Tidak ada perubahan fitur. Kode, database dan versi skema sama dengan 1.2.2.
+- 72 tes host lulus; coverage 1582/1582 (100%).
+
 ## 1.2.2 — tahan dobel dan pengamanan disk
 
 - Cek fingerprint + INSERT tetap di satu transaksi tulis (sqflite memakai
@@ -41,14 +48,18 @@ Belum ada bukti integrasi perangkat Android untuk 1.2.0 di sesi ini; lihat
 
 ## APK produksi
 
-| Berkas | Ukuran | SHA-256 |
-| --- | --- | --- |
-| `dist/KasKelasKu-1.2.2-production.apk` | 54.371.122 byte | `774b45f8079f8cecbb2281d0af456a6a8ff8d280a476f2f25c19207c5452382b` |
+| Berkas | ABI | Ukuran | SHA-256 |
+| --- | --- | --- | --- |
+| `dist/KasKelasKu-1.2.3-arm64.apk` | arm64-v8a | 19.099.196 byte | `63c7a3ef1f984fbee37b348cc1e8c04a7e9100ff10477047677515b3d3e611d6` |
+| `dist/KasKelasKu-1.2.3-armeabi-v7a.apk` | armeabi-v7a | 16.934.675 byte | `e6e6329c41d213598b7122c3b6417fb787c3d63f9a9746e9256d7a35110fd060` |
+
+Pakai `arm64` dulu; kalau pemasangan gagal dengan `INSTALL_FAILED_NO_MATCHING_ABIS`,
+HP-nya 32-bit dan pakai `armeabi-v7a`.
 
 Mode release, ditandatangani keystore produksi. `apksigner verify` lulus untuk
 skema v1 dan v2; sertifikat `CN=KasKelasKu Production`,
 SHA-256 `d279ad4139e6b65a2440fa7d966a67c201639928cf3ba266e310df127cb4bd97`
-(sama dengan 1.1.1, 1.2.0 dan 1.2.1, jadi pemasangan pembaruan tidak bentrok sertifikat).
+(sama dengan 1.1.1, 1.2.0, 1.2.1 dan 1.2.2, jadi pemasangan pembaruan tidak bentrok sertifikat).
 
 Verifikasi checksum:
 
@@ -59,7 +70,7 @@ python3 tool/check_apks.py
 Pasang melalui pengelola berkas Android atau Android SDK:
 
 ```sh
-adb install -r dist/KasKelasKu-1.2.2-production.apk
+adb install -r dist/KasKelasKu-1.2.3-arm64.apk
 ```
 
 Jangan mengabaikan `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: kemungkinan sertifikat
@@ -86,8 +97,9 @@ flutter analyze --fatal-infos
 flutter test --coverage
 python3 tool/check_schema.py
 python3 tool/check_coverage.py
-flutter build apk --release
-apksigner verify --verbose --print-certs build/app/outputs/flutter-apk/app-release.apk
+flutter build apk --release --split-per-abi
+apksigner verify --verbose --print-certs \
+  build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
 
 ## Riwayat
